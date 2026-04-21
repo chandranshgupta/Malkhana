@@ -1368,6 +1368,12 @@ export default function App() {
           from { opacity: 0; transform: scale(0.95) translateY(10px); }
           to { opacity: 1; transform: scale(1) translateY(0); }
         }
+
+        @keyframes stamp-drop {
+          0% { opacity: 0; transform: scale(2) rotate(15deg); }
+          60% { opacity: 1; transform: scale(0.9) rotate(15deg); }
+          100% { opacity: 0.9; transform: scale(1) rotate(15deg); }
+        }
       `}} />
     </div>
   );
