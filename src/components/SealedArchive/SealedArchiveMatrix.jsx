@@ -3,31 +3,30 @@ import { Search, X, CheckCircle2, Download } from 'lucide-react';
 import { WireframeSSD, WireframePhone, WireframeDVR } from '../shared/Wireframes';
 import { Stamp } from '../shared/Stamp';
 
+// Generate a massive grid of drawers (10 rows x 15 cols = 150)
+const INITIAL_DRAWERS = Array.from({ length: 150 }).map((_, i) => {
+  const row = Math.floor(i / 15) + 1;
+  const col = (i % 15) + 1;
+  const id = `R${row}-C${col}`;
+  let caseId = null;
+  let type = null;
+  
+  // Seed some specific cases for the demo
+  if (id === 'R5-C8') { caseId = 'CASE-101'; type = 'SSD'; }
+  else if (id === 'R2-C3') { caseId = 'CASE-404'; type = 'PHONE'; }
+  else if (id === 'R8-C12') { caseId = 'CASE-999'; type = 'DVR'; }
+  else if (Math.random() > 0.85) { 
+    caseId = `CASE-X${Math.floor(Math.random() * 900) + 100}`; 
+    type = ['SSD', 'PHONE', 'DVR'][Math.floor(Math.random() * 3)];
+  }
+
+  return { id, row, col, caseId, type };
+});
+
 export const SealedArchiveMatrix = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDrawer, setSelectedDrawer] = useState(null);
-
-  // Generate a massive grid of drawers (10 rows x 15 cols = 150)
-  const drawers = useMemo(() => {
-    return Array.from({ length: 150 }).map((_, i) => {
-      const row = Math.floor(i / 15) + 1;
-      const col = (i % 15) + 1;
-      const id = `R${row}-C${col}`;
-      let caseId = null;
-      let type = null;
-      
-      // Seed some specific cases for the demo
-      if (id === 'R5-C8') { caseId = 'CASE-101'; type = 'SSD'; }
-      else if (id === 'R2-C3') { caseId = 'CASE-404'; type = 'PHONE'; }
-      else if (id === 'R8-C12') { caseId = 'CASE-999'; type = 'DVR'; }
-      else if (Math.random() > 0.85) { 
-        caseId = `CASE-X${Math.floor(Math.random() * 900) + 100}`; 
-        type = ['SSD', 'PHONE', 'DVR'][Math.floor(Math.random() * 3)];
-      }
-
-      return { id, row, col, caseId, type };
-    });
-  }, []);
+  const drawers = INITIAL_DRAWERS;
 
   const handleSearch = (e) => {
     setSearchQuery(e.target.value.toUpperCase());

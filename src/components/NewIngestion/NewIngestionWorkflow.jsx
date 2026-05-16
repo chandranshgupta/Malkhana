@@ -12,6 +12,21 @@ import {
   UploadCloud 
 } from 'lucide-react';
 
+const AssetButton = ({ type, icon: Icon, label, assetType, setAssetType }) => (
+  <button
+    onClick={() => setAssetType(type)}
+    className={`aspect-square border-2 flex flex-col items-center justify-center gap-4 transition-all duration-300 ${
+      assetType === type 
+        ? 'border-slate-800 bg-slate-800 text-white shadow-[4px_4px_0px_rgba(100,116,139,0.5)] scale-105 z-10 relative' 
+        : 'border-slate-400 bg-white/60 text-slate-600 hover:border-slate-600 hover:bg-white/90 shadow-[2px_2px_0px_rgba(100,116,139,0.1)]'
+    }`}
+  >
+    <Icon size={32} strokeWidth={assetType === type ? 2 : 1.5} />
+    <span className="font-bold text-xs tracking-widest">{label}</span>
+    {type === 'FILES' && <div className="absolute top-2 right-2 w-2 h-2 bg-amber-500"></div>}
+  </button>
+);
+
 export const NewIngestionWorkflow = () => {
   // State for all workflow forms
   const [caseAnchor, setCaseAnchor] = useState('EXISTING'); // 'EXISTING' | 'NEW'
@@ -83,20 +98,7 @@ export const NewIngestionWorkflow = () => {
     });
   };
 
-  const AssetButton = ({ type, icon: Icon, label }) => (
-    <button
-      onClick={() => setAssetType(type)}
-      className={`aspect-square border-2 flex flex-col items-center justify-center gap-4 transition-all duration-300 ${
-        assetType === type 
-          ? 'border-slate-800 bg-slate-800 text-white shadow-[4px_4px_0px_rgba(100,116,139,0.5)] scale-105 z-10 relative' 
-          : 'border-slate-400 bg-white/60 text-slate-600 hover:border-slate-600 hover:bg-white/90 shadow-[2px_2px_0px_rgba(100,116,139,0.1)]'
-      }`}
-    >
-      <Icon size={32} strokeWidth={assetType === type ? 2 : 1.5} />
-      <span className="font-bold text-xs tracking-widest">{label}</span>
-      {type === 'FILES' && <div className="absolute top-2 right-2 w-2 h-2 bg-amber-500"></div>}
-    </button>
-  );
+
 
   return (
     <div className="flex-1 overflow-y-auto custom-scrollbar p-8 relative z-10 bg-[#f4f7f9]/50 backdrop-blur-[1px]">
@@ -153,12 +155,12 @@ export const NewIngestionWorkflow = () => {
            <h3 className="text-lg font-black tracking-widest border-b border-slate-300 pb-2 mb-6">CLASSIFICATION_</h3>
            
            <div className="grid grid-cols-3 md:grid-cols-6 gap-4 mb-8">
-              <AssetButton type="DISK" icon={HardDrive} label="DISK" />
-              <AssetButton type="MOBILE" icon={Smartphone} label="MOBILE" />
-              <AssetButton type="CCTV" icon={Video} label="CCTV" />
-              <AssetButton type="PENDRIVE" icon={Usb} label="USB" />
-              <AssetButton type="CLOUD" icon={Cloud} label="CLOUD" />
-              <AssetButton type="FILES" icon={FileCode2} label="FILES" />
+              <AssetButton type="DISK" icon={HardDrive} label="DISK" assetType={assetType} setAssetType={setAssetType} />
+              <AssetButton type="MOBILE" icon={Smartphone} label="MOBILE" assetType={assetType} setAssetType={setAssetType} />
+              <AssetButton type="CCTV" icon={Video} label="CCTV" assetType={assetType} setAssetType={setAssetType} />
+              <AssetButton type="PENDRIVE" icon={Usb} label="USB" assetType={assetType} setAssetType={setAssetType} />
+              <AssetButton type="CLOUD" icon={Cloud} label="CLOUD" assetType={assetType} setAssetType={setAssetType} />
+              <AssetButton type="FILES" icon={FileCode2} label="FILES" assetType={assetType} setAssetType={setAssetType} />
            </div>
 
            {/* Dynamic Matrix based on Selection */}
@@ -278,7 +280,7 @@ export const NewIngestionWorkflow = () => {
                     <div className={`w-5 h-5 border-2 flex items-center justify-center transition-colors ${formData.writeBlocker ? 'border-[#0ea5e9]' : 'border-slate-500'}`}>
                       <div className={`w-full h-full bg-[#0ea5e9] transition-transform duration-100 ${formData.writeBlocker ? 'scale-100' : 'scale-0'}`} />
                     </div>
-                    <input type="checkbox" className="hidden" checked={formData.writeBlocker} onChange={e=>updateForm('writeBlocker', !formData.writeBlocker)} />
+                    <input type="checkbox" className="hidden" checked={formData.writeBlocker} onChange={() => updateForm('writeBlocker', !formData.writeBlocker)} />
                     <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">WRITE_BLOCKER_ENGAGED</span>
                   </label>
                 </div>

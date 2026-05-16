@@ -37,9 +37,13 @@ export const ReportsDraftingTable = () => {
         });
       }, 100);
     } else {
-      if (!isLocked) setSignProgress(0);
+      if (!isLocked) {
+        timer = setTimeout(() => setSignProgress(0), 0);
+      }
     }
-    return () => clearInterval(timer);
+    return () => {
+      if (timer) clearTimeout(timer); // clearTimeout works for both setInterval and setTimeout in browser
+    };
   }, [isSigning, isLocked]);
 
   const updateField = (field, value) => { if (!isLocked) setData(prev => ({ ...prev, [field]: value })); };
