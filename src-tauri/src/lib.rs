@@ -6,14 +6,6 @@ pub mod utils;
 
 use tauri::Manager;
 
-// Tauri commands are registered here.
-// Each command corresponds to a function the React frontend can call via `invoke()`.
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("[MALKHANA_VAULT] System ready. Operator: {}", name)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -33,7 +25,18 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            commands::case_commands::create_case,
+            commands::evidence_commands::get_evidence_log,
+            commands::evidence_commands::ingest_evidence,
+            commands::evidence_commands::hash_file,
+            commands::custody_commands::transfer_custody,
+            commands::certificate_commands::generate_certificate,
+            commands::archive_commands::search_archive,
+            commands::search_commands::global_search,
+            commands::settings_commands::get_settings,
+            commands::settings_commands::update_setting,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Malkhana Vault");
 }
