@@ -1,3 +1,9 @@
+pub mod commands;
+pub mod core;
+pub mod data;
+pub mod security;
+pub mod utils;
+
 use tauri::Manager;
 
 // Tauri commands are registered here.
