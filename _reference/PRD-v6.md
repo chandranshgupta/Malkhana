@@ -3,9 +3,10 @@
 ### Tauri v2 + React + Rust Architecture
 
 > **Classification:** INTERNAL — DEVELOPMENT REFERENCE  
-> **Version:** 6.0.0 | **Date:** 2026-05-16  
+> **Version:** 6.1.0 | **Date:** 2026-05-17  
 > **Author:** Chandransh Gupta  
-> **Supersedes:** PRD v5.0 (Python/PySide6 Architecture)
+> **Supersedes:** PRD v6.0 (initial Tauri architecture) | PRD v5.0 (Python/PySide6)  
+> **Audit Status:** Production readiness audit completed 2026-05-17 — see §12, §19a–19d
 
 ---
 
@@ -30,8 +31,12 @@
 17. [Competitive Landscape](#17-competitive-landscape)
 18. [Packaging & Deployment](#18-packaging--deployment)
 19. [Phased Execution](#19-phased-execution)
-20. [Agent Skills Reference](#20-agent-skills-reference)
-21. [Glossary](#21-glossary)
+20. [CI/CD & Version Control Pipeline](#19a-cicd--version-control-pipeline)
+21. [Availability & Disaster Recovery](#19b-availability--disaster-recovery)
+22. [Error Handling & Logging](#19c-error-handling--logging)
+23. [Cloud Sync Scope](#19d-cloud-sync-scope-supabase--phase-4)
+24. [Agent Skills Reference](#20-agent-skills-reference)
+25. [Glossary](#21-glossary)
 
 ---
 
@@ -183,12 +188,12 @@ T0 is free and fully functional for single users. This creates adoption at the g
 
 | View | Component | Status |
 |------|-----------|--------|
-| EVIDENCE_LOG | Blueprint cards with wireframe SVGs | UI ✅ / Backend ❌ |
-| ACTIVE_CUSTODY | Node-based investigation board with red thread | UI ✅ / Backend ❌ |
-| SEALED_ARCHIVE | 15×10 coordinate matrix grid | UI ✅ / Backend ❌ |
-| REPORTS | Section 63 drafting table with live preview | UI ✅ / Backend ❌ |
-| SYSTEM_SETTINGS | Industrial toggles + legal compliance lock | UI ✅ / Backend ❌ |
-| NEW_INGESTION | 4-stage wizard with zero-trust terminal | UI ✅ / Backend ❌ |
+| EVIDENCE_LOG | Blueprint cards with wireframe SVGs | UI ✅ / Backend ✅ (DB-backed via `get_evidence_log`) |
+| ACTIVE_CUSTODY | Node-based investigation board with red thread | UI ✅ / Backend ⚠️ (stub) |
+| SEALED_ARCHIVE | 15×10 coordinate matrix grid | UI ✅ / Backend ⚠️ (stub) |
+| REPORTS | Section 63 drafting table with live preview | UI ✅ / Backend ✅ (`generate_certificate` + seal hash) |
+| SYSTEM_SETTINGS | Industrial toggles + legal compliance lock | UI ✅ / Backend ✅ (DB-persisted, locked settings enforced) |
+| NEW_INGESTION | 4-stage wizard with zero-trust terminal | UI ✅ / Backend ⚠️ (hash_file works, imaging stub) |
 
 ---
 
@@ -231,42 +236,42 @@ T0 is free and fully functional for single users. This creates adoption at the g
 ```
 src-tauri/src/
 ├── main.rs                         # Entry point
-├── lib.rs                          # Tauri builder + plugin registration
+├── lib.rs                          # ✅ Tauri builder + 11 commands registered + plugin init + auto-seed
 ├── commands/                       # Tauri invoke handlers
 │   ├── mod.rs
-│   ├── case_commands.rs            # Case CRUD, CNR lookup
-│   ├── evidence_commands.rs        # Evidence ingestion + hashing
-│   ├── custody_commands.rs         # Chain of custody transfers
-│   ├── certificate_commands.rs     # Section 63 PDF generation
-│   ├── archive_commands.rs         # Sealed archive grid operations
-│   ├── search_commands.rs          # Global + matrix search
-│   └── settings_commands.rs        # Engine config persistence
+│   ├── case_commands.rs            # ⚠️ create_case registered, needs full DB wiring
+│   ├── evidence_commands.rs        # ✅ get_evidence_log, ingest_evidence, hash_file — DB-backed
+│   ├── custody_commands.rs         # ⚠️ transfer_custody registered, stub
+│   ├── certificate_commands.rs     # ✅ generate_certificate, get_certificate, get_evidence_for_certificate
+│   ├── archive_commands.rs         # ⚠️ search_archive registered, stub
+│   ├── search_commands.rs          # ⚠️ global_search registered, stub
+│   └── settings_commands.rs        # ✅ get_settings, update_setting — DB-backed
 ├── core/                           # Business logic (UI-agnostic)
 │   ├── mod.rs
-│   ├── hash_engine.rs              # SHA-256, MD5, SHA-512 chunked
-│   ├── certificate_engine.rs       # BSA Section 63 template
-│   ├── imaging_engine.rs           # dc3dd subprocess via shell
-│   ├── merkle_tree.rs              # Merkle audit trail
-│   ├── audit_logger.rs             # Append-only event log
-│   ├── vault_manager.rs            # File vault CRUD
-│   ├── time_authority.rs           # IST-locked timestamps
-│   └── device_detector.rs          # USB/disk detection
+│   ├── hash_engine.rs              # ✅ SHA-256 + MD5 chunked hashing (958 bytes)
+│   ├── certificate_engine.rs       # ✅ compute_document_hash + build_certificate (3156 bytes)
+│   ├── imaging_engine.rs           # ⚠️ dc3dd subprocess coded, untested on Linux
+│   ├── merkle_tree.rs              # ❌ Empty — Phase 2
+│   ├── audit_logger.rs             # ❌ Empty — Phase 2 (basic append works via repository)
+│   ├── vault_manager.rs            # ❌ Empty — Phase 2
+│   ├── time_authority.rs           # ❌ Empty — Phase 2 (IST via SQL DEFAULT for now)
+│   └── device_detector.rs          # ❌ Empty — Phase 2
 ├── data/                           # Data layer
 │   ├── mod.rs
-│   ├── database.rs                 # SQLCipher init + migrations
-│   ├── models.rs                   # Serde structs
-│   ├── schema.rs                   # SQL DDL
-│   └── repository.rs              # Query functions
+│   ├── database.rs                 # ✅ SQLCipher + WAL + FK + integrity_check (1561 bytes)
+│   ├── models.rs                   # ✅ 11 structs: User, Case, Evidence, Certificate, etc. (6364 bytes)
+│   ├── schema.rs                   # ✅ 8 tables + default settings seed (7456 bytes)
+│   └── repository.rs              # ✅ Full CRUD: evidence, cases, certs, audit, settings, seed (13931 bytes)
 ├── security/                       # Encryption module
 │   ├── mod.rs
-│   ├── encryption.rs               # DB key management
-│   ├── key_derivation.rs           # PBKDF2
-│   └── integrity_checker.rs        # H1/H2/H3 verification
+│   ├── encryption.rs               # ❌ Empty — Phase 3
+│   ├── key_derivation.rs           # ❌ Empty — Phase 3 (PBKDF2)
+│   └── integrity_checker.rs        # ❌ Empty — Phase 2 (H1/H2/H3 verification)
 └── utils/
     ├── mod.rs
-    ├── constants.rs                # App-wide constants
-    ├── validators.rs               # Input sanitization
-    └── formatters.rs               # IST date formatting
+    ├── constants.rs                # ❌ Empty — Phase 1 (use inline for now)
+    ├── validators.rs               # ❌ Empty — Phase 2
+    └── formatters.rs               # ❌ Empty — Phase 2
 ```
 
 ### Key Invoke Commands
@@ -351,8 +356,31 @@ const result = await invoke('hash_file', { path: '/dev/sdb' });
 
 ## 11. Database Schema
 
+> **Status:** ✅ FULLY IMPLEMENTED — 8 tables + default settings seed  
+> **File:** `schema.rs` (7,456 bytes) | **Models:** `models.rs` (6,364 bytes, 11 structs)  
+> **Repository:** `repository.rs` (13,931 bytes — full CRUD for evidence, cases, certificates, audit, settings)
+
 ```sql
 -- Core Tables (SQLCipher encrypted)
+-- NOTE: Actual implementation uses CREATE TABLE IF NOT EXISTS
+-- with CHECK constraints and IST-locked DEFAULT timestamps.
+-- See schema.rs for the production DDL.
+
+CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL,               -- IO | MALKHANA_INCHARGE | FSL_EXAMINER | COURT_CLERK | SUPERVISOR | ADMIN
+    full_name TEXT,
+    designation TEXT,
+    organization TEXT,
+    public_key TEXT,                   -- For DSC (Phase 3)
+    is_active INTEGER DEFAULT 1,
+    failed_login_attempts INTEGER DEFAULT 0,
+    locked_until TEXT,                -- Lockout timestamp (Phase 3)
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 
 CREATE TABLE cases (
     id TEXT PRIMARY KEY,              -- UUID v4
@@ -450,19 +478,63 @@ CREATE TABLE settings (
 ## 12. Security Architecture
 
 ### Encryption
-- **Database:** SQLCipher (AES-256-CBC) via `rusqlite` with `bundled-sqlcipher` feature
-- **Key Derivation:** PBKDF2 with 256,000 iterations
-- **Key Storage:** Master password → derived key (never stored on disk)
+
+| Layer | Specification | Implementation Status |
+|-------|--------------|----------------------|
+| **Database** | SQLCipher (AES-256-CBC) via `rusqlite` with `bundled-sqlcipher` feature | ✅ Active — all data encrypted at rest |
+| **Key Derivation** | PBKDF2 with 256,000 iterations | ❌ Not yet — `key_derivation.rs` empty |
+| **Key Storage** | Master password → derived key (never stored on disk) | ❌ Not yet — Phase 3 |
+
+> **⚠️ KNOWN TECHNICAL DEBT:** `database.rs` line 14 uses a hardcoded encryption key `"malkhana-vault-2024-secure-key-v1"`. This is acceptable for development/demo but **MUST** be replaced with PBKDF2-derived key from user's master password before ANY government or production deployment. The key must never be stored on disk — derived at runtime from user input only.
 
 ### Integrity
-- **Dual Hashing:** Every evidence item gets both SHA-256 AND MD5 (BSA 2026 mandate)
-- **Merkle Tree:** All audit log entries form a hash chain — tampering any entry invalidates all subsequent entries
-- **Append-Only:** No DELETE operations exist in the codebase. Period.
+
+| Mechanism | Status | Details |
+|-----------|--------|---------|
+| **Dual Hashing** (SHA-256 + MD5) | ✅ Implemented | `hash_engine.rs` — chunked streaming for large files |
+| **Certificate Document Seal** | ✅ Implemented | `certificate_engine.rs` — deterministic SHA-256 over all cert fields |
+| **Merkle Tree** | ❌ Phase 2 | `merkle_tree.rs` empty — `audit_log` schema has `prev_hash`/`entry_hash` columns ready |
+| **Append-Only** | ✅ Enforced | No DELETE operations exist in `repository.rs`. Period. |
 
 ### Isolation
-- **Offline-First:** No network calls in core operation
+- **Offline-First:** No network calls in core operation — all data flows through `tauri::invoke()` IPC
 - **CSP Enforced:** Tauri CSP blocks external script/style injection
 - **Write-Blocker Verification:** Terminal stage requires explicit write-blocker checkbox before imaging
+
+### OWASP Top 10 (2021) — Desktop App Mapping
+
+| # | OWASP Risk | Relevance | Mitigation | Status |
+|---|-----------|-----------|------------|--------|
+| A01 | Broken Access Control | Multi-user shared PC | RBAC with role-locked commands | ❌ Phase 3 |
+| A02 | Cryptographic Failures | DB encryption, hash integrity | SQLCipher AES-256 + dual hash | ⚠️ Key hardcoded |
+| A03 | Injection | SQL via invoke args | `rusqlite` parameterized queries (safe by default) | ✅ Safe |
+| A04 | Insecure Design | Evidence tampering | Append-only + Merkle tree | ⚠️ Merkle not yet |
+| A05 | Security Misconfiguration | CSP, file permissions | CSP in `tauri.conf.json` | ⚠️ `unsafe-inline` present |
+| A06 | Vulnerable Components | Dependency vulns | Snyk SAST scanning | ✅ 0 issues found |
+| A07 | Auth Failures | Login bypass | Argon2id + lockout policy | ❌ Phase 3 |
+| A08 | Data Integrity Failures | Evidence tampering | Triple-Hash + Merkle chain | ⚠️ H2/H3 not yet |
+| A09 | Logging Failures | Missing audit trail | `audit_log` table + append function | ⚠️ Basic only |
+| A10 | SSRF | Not applicable (offline) | N/A | ✅ Safe |
+
+### ISO 27001 Relevant Controls
+
+| Control | Applicability | Status |
+|---------|-------------|--------|
+| A.8 Asset Management | Evidence tracking core feature | ✅ Implemented |
+| A.10 Cryptography | AES-256 DB + SHA-256 hashing | ✅ Active |
+| A.12 Operations Security | Audit logging, change management | ⚠️ Basic |
+| A.14 System Acquisition | Secure dev lifecycle (Snyk) | ✅ Active |
+| A.18 Compliance | BSA Section 63 certificate engine | ✅ Implemented |
+
+### Tauri-Specific Security Hardening
+
+| Item | Current State | Required Action |
+|------|-------------|-----------------|
+| CSP header | Configured, blocks external scripts | ✅ Good |
+| `unsafe-inline` in CSP | Present for both `style-src` AND `script-src` | **Remove from `script-src` before production** |
+| IPC scope | All 11 commands exposed globally | Add per-command RBAC checks (Phase 3) |
+| File system scope | `tauri-plugin-fs` has broad access | Restrict to evidence vault directory only |
+| Shell scope | `tauri-plugin-shell` unrestricted | Restrict to `dc3dd` binary path only |
 
 ---
 
@@ -660,45 +732,197 @@ AppImage is self-contained — copy to USB, chmod +x, run. Database file stored 
 
 ## 19. Phased Execution
 
-### Phase 1: Foundation (Weeks 1–4)
+### Phase 1: Foundation (Weeks 1–4) — **IN PROGRESS**
 > Goal: "Hash a real file, save to DB, generate a real certificate PDF"
 
-- [ ] Implement Rust hash_engine (SHA-256 + MD5 chunked hashing)
-- [ ] Set up SQLCipher database with schema
-- [ ] Wire invoke() bridge: React ↔ Rust for case CRUD
-- [ ] Wire invoke() bridge: Evidence ingestion → real file hashing
-- [ ] Wire invoke() bridge: Settings persistence via tauri-plugin-store
-- [ ] Fix all P0 gaps (G1, G4, G6, G7, G9, G10, G12, G14–G19, G22)
-- [ ] Certificate PDF via webview print
-- [ ] AppImage packaging test
+- [x] Implement Rust hash_engine (SHA-256 + MD5 chunked hashing)
+- [x] Set up SQLCipher database with schema (8 tables, WAL mode, FK enforcement, integrity_check)
+- [x] Wire invoke() bridge: React ↔ Rust for evidence CRUD (`get_evidence_log`, `ingest_evidence`)
+- [x] Wire invoke() bridge: Certificate generation (`generate_certificate`, `get_certificate`)
+- [x] Wire invoke() bridge: Settings persistence via DB (`get_settings`, `update_setting`)
+- [x] Implement `certificate_engine.rs` — deterministic SHA-256 document seal
+- [x] Implement `repository.rs` — full CRUD for evidence, cases, certs, audit, settings
+- [x] Implement `models.rs` — 11 serde structs + UI view models
+- [x] Auto-seed demo data on first run (1 case, 3 evidence items)
+- [x] Enable WAL mode + `PRAGMA integrity_check` on startup
+- [x] Snyk SAST scan — 0 security issues found
+- [ ] Wire `ReportsDraftingTable.jsx` to `generate_certificate` via Tauri invoke bridge
+- [ ] Implement `@media print` CSS for BSA-admissible PDF certificate output
+- [ ] Wire `case_commands.rs` fully to `repository.rs` (currently basic)
+- [ ] Fix remaining P0 gaps (G4, G6, G7, G10, G14–G19, G22)
+- [ ] AppImage packaging test on Linux
 
 ### Phase 2: Evidence Lifecycle (Weeks 5–8)
 > Goal: "Full custody chain with Triple-Hash verification"
 
 - [ ] Triple-Hash Protocol (H1→H2→H3) with verification at each transfer
 - [ ] Dynamic custody chain board (per-evidence, DB-backed)
-- [ ] dc3dd imaging integration via tauri-plugin-shell
+- [ ] dc3dd imaging integration via tauri-plugin-shell (test on Linux)
 - [ ] Sealed Archive matrix ↔ database
-- [ ] Merkle audit trail
+- [ ] Merkle audit trail (`merkle_tree.rs` + `audit_logger.rs`)
 - [ ] Panch witness module
 - [ ] Form CC-1 auto-generation
+- [ ] Implement `time_authority.rs` (IST-locked timestamp service)
+- [ ] Implement `vault_manager.rs` (file vault CRUD)
+- [ ] Implement `device_detector.rs` (USB/disk detection)
+- [ ] Implement `integrity_checker.rs` (H1/H2/H3 comparison logic)
 - [ ] Fix P1 gaps (G2, G3, G8, G11, G13, G20, G21, G23)
 
 ### Phase 3: Compliance & Multi-User (Weeks 9–12)
-> Goal: "Court-ready evidence packages"
+> Goal: "Court-ready evidence packages with role-based access"
 
-- [ ] RBAC (IO, Malkhana In-Charge, FSL Examiner roles)
+- [ ] RBAC (IO, Malkhana In-Charge, FSL Examiner, Court Clerk, Supervisor, Admin roles)
+- [ ] Login/unlock screen UI
+- [ ] Password hashing: **Argon2id** (add `argon2` crate)
+- [ ] PIN + optional master password for quick unlock vs full auth
+- [ ] Auto-lock after **5 minutes idle** (Tauri window blur event)
+- [ ] Max **5 failed login attempts → 30 min lockout** (stored in `users.locked_until`)
+- [ ] Replace hardcoded DB key with **PBKDF2-derived key** from master password
 - [ ] DSC (Digital Signature Certificate) integration
 - [ ] Hindi certificate template
 - [ ] Disposition workflow
 - [ ] Movement Register timeline view
+- [ ] Remove `'unsafe-inline'` from `script-src` in CSP
+- [ ] Restrict `tauri-plugin-fs` scope to evidence vault directory only
+- [ ] Restrict `tauri-plugin-shell` scope to `dc3dd` binary only
 - [ ] Fix P2 gaps (G24, G25)
 
 ### Phase 4: Scale (Month 4+)
 - [ ] Windows build (Tauri native)
 - [ ] macOS build (Tauri native)
-- [ ] Supabase sync (metadata-only, evidence stays local)
+- [ ] Supabase sync (metadata-only, evidence stays local — see §12a)
 - [ ] Training/demo mode with sample data
+- [ ] GPG code signing for .deb/.rpm packages (government procurement)
+
+---
+
+## 19a. CI/CD & Version Control Pipeline
+
+> **Gap identified:** No automated build/test pipeline existed. This is critical for a forensic tool where every build must be verifiable.
+
+### Recommended GitHub Actions Pipeline
+
+```yaml
+# .github/workflows/ci.yml
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - cargo fmt --check
+      - cargo clippy -- -D warnings
+      - cargo test
+      - npm run lint
+      - snyk test (Rust + npm dependencies)
+  build:
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - cargo build --release
+      - npx tauri build
+      - Upload artifacts (.deb, .rpm, AppImage)
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - Create GitHub Release
+      - Attach build artifacts
+      - Generate SBOM (Software Bill of Materials)
+```
+
+### Git Conventions (enforced)
+
+| Convention | Rule |
+|-----------|------|
+| **Branches** | `feat/`, `fix/`, `refactor/`, `docs/` prefixes |
+| **Commits** | Conventional Commits: `feat(hash-engine): implement SHA-256 chunked hashing` |
+| **PRs** | Must pass Snyk security scan + `cargo clippy` before merge |
+| **Secrets** | `.env` in `.gitignore` — DB passwords never committed |
+| **Tags** | Semantic versioning: `v0.1.0`, `v0.2.0`, etc. |
+
+---
+
+## 19b. Availability & Disaster Recovery
+
+> **Gap identified:** No specification for handling power loss, DB corruption, or backup procedures — critical for Indian police stations with unreliable electricity.
+
+### Database Resilience
+
+| Mechanism | Status | Details |
+|-----------|--------|---------|
+| **WAL Mode** | ✅ Enabled | `PRAGMA journal_mode=WAL;` in `database.rs` — prevents corruption on power loss |
+| **Integrity Check** | ✅ Enabled | `PRAGMA integrity_check;` runs on every startup — logs error if corruption detected |
+| **Foreign Keys** | ✅ Enabled | `PRAGMA foreign_keys=ON;` — referential integrity enforced |
+| **Auto-Backup** | ❌ Phase 2 | On startup, copy `malkhana.db` → `malkhana.db.bak` (keep last 3 backups) |
+| **Export Vault** | ❌ Phase 2 | "EXPORT_VAULT" button creates timestamped `.zip` of DB + settings |
+| **Restore** | ❌ Phase 2 | If integrity check fails, offer restore from most recent `.bak` file |
+
+### Recovery Procedure (to document in user manual)
+
+1. If app fails to start: copy `malkhana.db.bak` → `malkhana.db`
+2. If evidence files lost: out of scope (user's responsibility to maintain physical backups)
+3. USB backup recommended: weekly copy of `{app_data_dir}/` to external USB drive
+
+---
+
+## 19c. Error Handling & Logging
+
+> **Gap identified:** No specification for crash handling, user-facing errors, or production logging.
+
+### Rust Backend Error Handling
+
+| Component | Specification | Status |
+|-----------|--------------|--------|
+| **Error type** | `AppError` enum via `thiserror` crate | ❌ Not yet (crate in `Cargo.toml`) |
+| **Result pattern** | All commands return `Result<T, AppError>` — no `.unwrap()` in production | ⚠️ Some `.expect()` remain |
+| **Panic handler** | `std::panic::set_hook` → write to crash log → show user dialog | ❌ Phase 2 |
+| **Log crate** | `log` macros (`info!`, `warn!`, `error!`) — never `println!` | ✅ Used |
+
+### Production Logging
+
+| Item | Specification |
+|------|--------------|
+| **Plugin** | `tauri-plugin-log` (initialized in `lib.rs`) |
+| **Debug mode** | Console output at `Info` level |
+| **Release mode** | File logging to `{app_data_dir}/logs/malkhana-YYYY-MM-DD.log` |
+| **Rotation** | Daily rotation, keep last 30 days |
+| **Forensic audit** | Separate `audit_log` table (append-only, Merkle-chained) |
+
+### Frontend Error Handling
+
+| Component | Specification | Status |
+|-----------|--------------|--------|
+| **Error Boundary** | React ErrorBoundary wrapping each view — prevents white-screen crashes | ❌ Phase 2 |
+| **Invoke errors** | All `invoke()` calls wrapped in try/catch with user-friendly toast | ❌ Phase 1 remaining |
+| **Loading states** | Skeleton loaders during DB queries | ❌ Phase 2 |
+
+---
+
+## 19d. Cloud Sync Scope (Supabase — Phase 4)
+
+> **Gap identified:** No specification for what data syncs to Supabase vs what stays local.
+
+### Data Classification
+
+| Classification | Examples | Syncs to Supabase? |
+|---------------|---------|-------------------|
+| **NEVER SYNC** | Evidence hashes, PII (names, addresses), custody chain details, file paths, audit logs | ❌ Absolutely not |
+| **SYNC (anonymized)** | Case counts, evidence counts by type, certificate generation counts, system health metrics | ✅ Metadata only |
+| **SYNC (opt-in)** | Error/crash reports, feature usage analytics | ✅ With explicit consent |
+
+### Sync Mechanism
+
+| Item | Specification |
+|------|--------------|
+| **Trigger** | Manual "UPLOAD_METRICS" button — **never automatic** |
+| **Auth** | Supabase service role key stored in `tauri-plugin-store` (encrypted by OS keychain) |
+| **Transport** | HTTPS only, TLS 1.3 minimum |
+| **Frequency** | At most once per day, user-initiated |
+| **Fallback** | If offline, queue locally and retry on next manual trigger |
 
 ---
 
@@ -773,5 +997,43 @@ AppImage is self-contained — copy to USB, chmod +x, run. Database file stored 
 
 ---
 
-*END OF PRD v6.0*
+## Appendix B: Production Readiness Scoreboard (v6.1.0)
 
+> Audited: 2026-05-17 | Cross-referenced against codebase + PRD v6.0
+
+| Dimension | Status | Score | Notes |
+|-----------|--------|-------|-------|
+| **Frontend** | ✅ Ready | 9/10 | All 6 views built, backend wiring in progress |
+| **Backend Logic** | ✅ Functional | 7/10 | 5/8 command files DB-backed, 3 stubs remain |
+| **Database & Storage** | ✅ Hardened | 8/10 | SQLCipher + WAL + integrity_check + 8 tables |
+| **Certificate Engine** | ✅ Complete | 9/10 | SHA-256 document seal, full BSA §63 fields |
+| **Auth & RBAC** | ❌ Phase 3 | 1/10 | Schema ready (`users` table), no implementation |
+| **CI/CD Pipeline** | ❌ Not set up | 0/10 | Spec written in §19a, needs `.github/workflows/` |
+| **Security (OWASP)** | ⚠️ Partial | 5/10 | A03/A06/A10 ✅, key hardcoded, CSP needs tightening |
+| **Availability/Recovery** | ⚠️ Basic | 4/10 | WAL + integrity ✅, no auto-backup yet |
+| **Error Handling** | ⚠️ Minimal | 3/10 | `thiserror` in deps, not used yet |
+| **Cloud Sync** | ❌ Phase 4 | 0/10 | Scope defined in §19d |
+| **Rate Limiting** | ✅ N/A | — | Not applicable (offline desktop app) |
+| **Caching & CDN** | ✅ N/A | — | Not applicable (embedded frontend) |
+| **Load Balancing** | ✅ N/A | — | Not applicable (single-user desktop) |
+
+### v6.1.0 Changelog (vs v6.0.0)
+
+| Change | Section |
+|--------|---------|
+| Updated backend module tree with implementation status (✅/⚠️/❌) | §8 |
+| Updated view status table to reflect DB-backed views | §6 |
+| Expanded Security Architecture with OWASP Top 10, ISO 27001, Tauri hardening | §12 |
+| Documented hardcoded encryption key as known technical debt | §12 |
+| Added `users` table to schema documentation | §11 |
+| Marked Phase 1 completed items (11 of 16 done) | §19 |
+| Expanded Phase 3 with detailed auth spec (Argon2id, lockout, auto-lock) | §19 |
+| **NEW:** CI/CD & Version Control Pipeline specification | §19a |
+| **NEW:** Availability & Disaster Recovery specification | §19b |
+| **NEW:** Error Handling & Logging specification | §19c |
+| **NEW:** Cloud Sync Scope (Supabase data classification) | §19d |
+| **NEW:** Production Readiness Scoreboard | Appendix B |
+
+---
+
+*END OF PRD v6.1.0*
