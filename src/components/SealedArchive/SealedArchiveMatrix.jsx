@@ -1,38 +1,81 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, X, CheckCircle2, Download } from 'lucide-react';
 import { WireframeSSD, WireframePhone, WireframeDVR } from '../shared/Wireframes';
 import { Stamp } from '../shared/Stamp';
+import { getArchiveMatrix, searchArchive, getEvidenceLog } from '../../api/invoke';
 
-// Generate a massive grid of drawers (10 rows x 15 cols = 150)
-const INITIAL_DRAWERS = Array.from({ length: 150 }).map((_, i) => {
-  const row = Math.floor(i / 15) + 1;
-  const col = (i % 15) + 1;
-  const id = `R${row}-C${col}`;
-  let caseId = null;
-  let type = null;
-  
-  // Seed some specific cases for the demo
-  if (id === 'R5-C8') { caseId = 'CASE-101'; type = 'SSD'; }
-  else if (id === 'R2-C3') { caseId = 'CASE-404'; type = 'PHONE'; }
-  else if (id === 'R8-C12') { caseId = 'CASE-999'; type = 'DVR'; }
-  else if (Math.random() > 0.85) { 
-    caseId = `CASE-X${Math.floor(Math.random() * 900) + 100}`; 
-    type = ['SSD', 'PHONE', 'DVR'][Math.floor(Math.random() * 3)];
-  }
-
-  return { id, row, col, caseId, type };
-});
-
-export const SealedArchiveMatrix = () => {
+export const SealedArchiveMatrix = ({ onPrintCC1 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [slots, setSlots] = useState([]);
+  const [evidenceMap, setEvidenceMap] = useState({});
   const [selectedDrawer, setSelectedDrawer] = useState(null);
-  const drawers = INITIAL_DRAWERS;
+  const [highlightedLocations, setHighlightedLocations] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [matrix, evidenceLog] = await Promise.all([
+          getArchiveMatrix(),
+          getEvidenceLog()
+        ]);
+        
+        // Build evidence map
+        const evMap = {};
+        evidenceLog.forEach(ev => {
+          evMap[ev.id] = ev;
+        });
+        setEvidenceMap(evMap);
+        setSlots(matrix);
+      } catch (err) {
+        console.error("Failed to load archive details:", err);
+      }
+    };
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    if (searchQuery.trim().length > 2) {
+      const runSearch = async () => {
+        try {
+          const results = await searchArchive(searchQuery);
+          setHighlightedLocations(results);
+        } catch (err) {
+          console.error("Search failed:", err);
+        }
+      };
+      runSearch();
+    } else {
+      setHighlightedLocations([]);
+    }
+  }, [searchQuery]);
 
   const handleSearch = (e) => {
     setSearchQuery(e.target.value.toUpperCase());
   };
 
-  const isSearchActive = searchQuery.length > 2;
+  const isSearchActive = searchQuery.trim().length > 2;
+
+  // Generate 150 drawers matching coordinates R1-C1 to R10-C15
+  const drawers = useMemo(() => {
+    return Array.from({ length: 150 }).map((_, i) => {
+      const row = Math.floor(i / 15) + 1;
+      const col = (i % 15) + 1;
+      const id = `R${row}-C${col}`;
+      
+      const dbSlot = slots.find(s => s.location === id);
+      const evidence = dbSlot && dbSlot.evidence_id ? evidenceMap[dbSlot.evidence_id] : null;
+
+      return {
+        id,
+        row,
+        col,
+        dbSlot,
+        evidence,
+        caseId: evidence ? evidence.case_id : null,
+        type: evidence ? evidence.asset_type : null,
+      };
+    });
+  }, [slots, evidenceMap]);
 
   return (
     <div className="flex-1 flex flex-col relative z-10 overflow-hidden bg-[#f4f7f9]/50 backdrop-blur-[1px]">
@@ -52,7 +95,7 @@ export const SealedArchiveMatrix = () => {
           </div>
           <input 
             type="text" 
-            placeholder="ENTER_CASE_ID_OR_CNR (Try: CASE-101)" 
+            placeholder="SEARCH_BY_CASE_OR_EVIDENCE" 
             value={searchQuery}
             onChange={handleSearch}
             className="bg-transparent border-none outline-none w-full px-4 text-sm font-bold uppercase placeholder-slate-400 font-mono tracking-wider"
@@ -84,19 +127,20 @@ export const SealedArchiveMatrix = () => {
                {/* The Wall */}
                <div className="grid grid-cols-[repeat(15,minmax(0,1fr))] gap-2 flex-1">
                  {drawers.map(drawer => {
-                   const isMatch = isSearchActive && drawer.caseId?.includes(searchQuery);
+                   const isMatch = isSearchActive && highlightedLocations.includes(drawer.id);
                    const isDimmed = isSearchActive && !isMatch;
+                   const hasEvidence = !!drawer.evidence;
                    
                    return (
                      <div 
                        key={drawer.id}
-                       onClick={() => drawer.caseId && setSelectedDrawer(drawer)}
+                       onClick={() => hasEvidence && setSelectedDrawer(drawer)}
                        className={`
                          border h-16 relative flex items-center justify-center transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)]
-                         ${!drawer.caseId ? 'border-slate-300 bg-transparent opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-slate-500'}
+                         ${!hasEvidence ? 'border-slate-300 bg-transparent opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-slate-500'}
                          ${isMatch ? 'border-[#0ea5e9] bg-[#e0f2fe] scale-[1.15] z-30 shadow-[8px_8px_0px_rgba(2,132,199,0.3)] animate-pulse' : ''}
                          ${isDimmed ? 'opacity-20 grayscale pointer-events-none' : ''}
-                         ${!isMatch && !isDimmed && drawer.caseId ? 'border-slate-400 bg-white/60 shadow-[2px_2px_0px_rgba(100,116,139,0.1)] hover:bg-white/90 hover:-translate-y-0.5 hover:-translate-x-0.5 hover:shadow-[4px_4px_0px_rgba(100,116,139,0.2)]' : ''}
+                         ${!isMatch && !isDimmed && hasEvidence ? 'border-slate-400 bg-white/60 shadow-[2px_2px_0px_rgba(100,116,139,0.1)] hover:bg-white/90 hover:-translate-y-0.5 hover:-translate-x-0.5 hover:shadow-[4px_4px_0px_rgba(100,116,139,0.2)]' : ''}
                        `}
                      >
                        {/* Hardware Handle Detail */}
@@ -108,7 +152,7 @@ export const SealedArchiveMatrix = () => {
                        </div>
                        
                        {/* Content Indicator Dot */}
-                       {drawer.caseId && (
+                       {hasEvidence && (
                          <div className={`absolute top-1.5 left-1.5 w-1.5 h-1.5 rounded-none ${isMatch ? 'bg-[#0ea5e9]' : 'bg-slate-600'}`}></div>
                        )}
                      </div>
@@ -121,7 +165,7 @@ export const SealedArchiveMatrix = () => {
       </div>
 
       {/* Blueprint Drawer Modal */}
-      {selectedDrawer && (
+      {selectedDrawer && selectedDrawer.evidence && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-slate-900/40 backdrop-blur-md">
           <div className="bg-[#f4f7f9] border-2 border-slate-800 p-10 shadow-[16px_16px_0px_rgba(30,41,59,1)] w-full max-w-4xl relative overflow-hidden animate-[fade-in_0.2s_ease-out]">
             
@@ -150,8 +194,9 @@ export const SealedArchiveMatrix = () => {
               {/* Left Column: Visuals & Status */}
               <div className="flex flex-col">
                 <div className="mb-6">
-                  <h3 className="text-4xl font-black text-slate-800 tracking-tighter mb-1">{selectedDrawer.caseId}</h3>
-                  <div className="text-xs font-bold text-slate-500 tracking-widest uppercase">LOC: PHYSICAL_MATRIX • {selectedDrawer.id}</div>
+                  <h3 className="text-3xl font-black text-slate-800 tracking-tighter mb-1 uppercase">ID: {selectedDrawer.evidence.id}</h3>
+                  <div className="text-xs font-bold text-[#0ea5e9] tracking-widest uppercase mb-1">CASE: {selectedDrawer.caseId}</div>
+                  <div className="text-[10px] font-mono font-bold text-slate-500 tracking-wider uppercase">LOC: PHYSICAL_MATRIX • {selectedDrawer.id}</div>
                 </div>
 
                 <div className="flex-1 border-2 border-slate-400 bg-white relative p-6 flex items-center justify-center min-h-[300px]">
@@ -161,10 +206,11 @@ export const SealedArchiveMatrix = () => {
                     <div className="absolute h-full w-[1px] bg-slate-800"></div>
                   </div>
                   
-                  <div className="w-64 h-64">
-                    {selectedDrawer.type === 'SSD' && <WireframeSSD />}
-                    {selectedDrawer.type === 'PHONE' && <WireframePhone />}
-                    {selectedDrawer.type === 'DVR' && <WireframeDVR />}
+                  <div className="w-64 h-64 flex items-center justify-center">
+                    {selectedDrawer.type === 'DISK' && <WireframeSSD />}
+                    {selectedDrawer.type === 'MOBILE' && <WireframePhone />}
+                    {selectedDrawer.type === 'CCTV' && <WireframeDVR />}
+                    {!['DISK', 'MOBILE', 'CCTV'].includes(selectedDrawer.type) && <WireframeSSD />}
                   </div>
 
                   <Stamp text="STATUS: IMMUTABLE" type="blue" rotate="-rotate-6" extraClasses="top-4 right-4 w-40 h-40" />
@@ -177,17 +223,20 @@ export const SealedArchiveMatrix = () => {
                 <div className="space-y-6">
                   <div>
                      <h4 className="text-[10px] font-bold text-slate-400 mb-1 tracking-widest border-b border-slate-300 pb-1">ASSET_CLASS</h4>
-                     <p className="text-lg font-bold text-slate-800 uppercase">{selectedDrawer.type}</p>
+                     <p className="text-lg font-bold text-slate-800 uppercase">{selectedDrawer.evidence.title || selectedDrawer.type}</p>
+                     <p className="text-xs text-slate-500 mt-1">{selectedDrawer.evidence.description}</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-6">
                     <div>
                       <h4 className="text-[10px] font-bold text-slate-400 mb-1 tracking-widest border-b border-slate-300 pb-1">SEIZURE_DATE</h4>
-                      <p className="text-sm font-bold text-slate-800">2026-04-12 14:30 IST</p>
+                      <p className="text-sm font-bold text-slate-800">
+                        {new Date(selectedDrawer.evidence.seized_at).toLocaleDateString()}
+                      </p>
                     </div>
                     <div>
-                      <h4 className="text-[10px] font-bold text-slate-400 mb-1 tracking-widest border-b border-slate-300 pb-1">CUSTODIAN_ID</h4>
-                      <p className="text-sm font-bold text-slate-800">OPR_092</p>
+                      <h4 className="text-[10px] font-bold text-slate-400 mb-1 tracking-widest border-b border-slate-300 pb-1">SEAL_NUMBER</h4>
+                      <p className="text-sm font-bold text-slate-800">{selectedDrawer.evidence.seal_number || "N/A"}</p>
                     </div>
                   </div>
 
@@ -195,7 +244,7 @@ export const SealedArchiveMatrix = () => {
                      <h4 className="text-[10px] font-bold text-slate-400 mb-1 tracking-widest border-b border-slate-300 pb-1">CRYPTOGRAPHIC_HASH (SHA-256)</h4>
                      <div className="bg-slate-200 p-3 border border-slate-300">
                        <p className="text-[10px] font-mono font-bold text-slate-700 break-all leading-relaxed">
-                         e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                         {selectedDrawer.evidence.hash_sha256 || "N/A"}
                        </p>
                      </div>
                   </div>
@@ -210,7 +259,10 @@ export const SealedArchiveMatrix = () => {
                 </div>
 
                 {/* Brutalist Export Button */}
-                <button className="w-full mt-8 border-2 border-slate-800 bg-slate-800 text-white font-bold tracking-widest py-4 flex items-center justify-center gap-3 shadow-[6px_6px_0px_rgba(100,116,139,0.5)] transition-all active:shadow-none active:translate-x-[6px] active:translate-y-[6px] hover:bg-slate-700">
+                <button 
+                  onClick={() => onPrintCC1 && onPrintCC1(selectedDrawer.evidence.id)}
+                  className="w-full mt-8 border-2 border-slate-800 bg-slate-800 text-white font-bold tracking-widest py-4 flex items-center justify-center gap-3 shadow-[6px_6px_0px_rgba(100,116,139,0.5)] transition-all active:shadow-none active:translate-x-[6px] active:translate-y-[6px] hover:bg-slate-700"
+                >
                   <Download size={18} />
                   EXPORT_CHAIN_OF_CUSTODY
                 </button>

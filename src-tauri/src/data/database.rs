@@ -21,7 +21,7 @@ pub fn init_db<P: AsRef<Path>>(path: P) -> Result<Connection> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
     
     // Verify encryption is working
-    conn.execute("SELECT count(*) FROM sqlite_master;", [])?;
+    let _: i64 = conn.query_row("SELECT count(*) FROM sqlite_master;", [], |row| row.get(0))?;
     
     // Run integrity check on startup — detect any corruption early
     let integrity: String = conn.query_row(

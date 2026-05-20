@@ -11,6 +11,9 @@ import {
   Terminal as TerminalIcon, 
   UploadCloud 
 } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
+import { getAllCases, createCase, ingestEvidence, detectDevices } from '../../api/invoke';
 
 const AssetButton = ({ type, icon: Icon, label, assetType, setAssetType }) => (
   <button
@@ -27,10 +30,10 @@ const AssetButton = ({ type, icon: Icon, label, assetType, setAssetType }) => (
   </button>
 );
 
-export const NewIngestionWorkflow = () => {
+export const NewIngestionWorkflow = ({ setCurrentView }) => {
   // State for all workflow forms
   const [caseAnchor, setCaseAnchor] = useState('EXISTING'); // 'EXISTING' | 'NEW'
-  const [assetType, setAssetType] = useState(null); // 'DISK' | 'MOBILE' | 'CCTV' | 'PENDRIVE' | 'CLOUD' | 'FILES'
+  const [assetType, setAssetType] = useState(null); // 'DISK' | 'MOBILE' | 'CCTV' | 'USB' | 'CLOUD' | 'FILES'
   const [formData, setFormData] = useState({
     cnr: '', fir: '', io: '', jurisdiction: '',
     fileName: '', fileFormat: '', fileSource: '',
@@ -38,8 +41,113 @@ export const NewIngestionWorkflow = () => {
     camId: '', timeOffset: '', fps: '', codec: '',
     size: '', fs: '', serial: '', vidpid: '',
     sealNum: '', condition: '',
-    writeBlocker: false, sourceDrive: '/dev/sdX'
+    writeBlocker: false, sourceDrive: '/dev/sdb (1.0 TB)',
+    deviceMake: '', deviceModel: '', deviceColor: '',
+    witness1Name: '', witness1Contact: '',
+    witness2Name: '', witness2Contact: '',
+    faradayIsolation: false, videoRecordingRef: ''
   });
+  
+  const [simulationSourcePath, setSimulationSourcePath] = useState('');
+  
+  const [cases, setCases] = useState([]);
+  const [selectedCaseId, setSelectedCaseId] = useState('');
+  const [selectedFilePath, setSelectedFilePath] = useState('');
+  const [computedHashes, setComputedHashes] = useState({ sha256: '', md5: '' });
+
+  // USB/Disk auto-detection
+  const [detectedDevices, setDetectedDevices] = useState([]);
+  const [detecting, setDetecting] = useState(false);
+
+  const refreshDrives = async () => {
+    setDetecting(true);
+    try {
+      const list = await detectDevices();
+      setDetectedDevices(list);
+      if (list.length > 0) {
+        updateForm('sourceDrive', list[0].path);
+        updateForm('deviceModel', list[0].model || list[0].name);
+        updateForm('size', `${(list[0].size_bytes / (1024*1024*1024)).toFixed(1)} GB`);
+      }
+    } catch (err) {
+      console.error("Failed to detect devices:", err);
+    } finally {
+      setDetecting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (assetType && assetType !== 'FILES') {
+      refreshDrives();
+    }
+  }, [assetType]);
+
+  const handleDeviceChange = (path) => {
+    updateForm('sourceDrive', path);
+    const dev = detectedDevices.find(d => d.path === path);
+    if (dev) {
+      updateForm('deviceModel', dev.model || dev.name);
+      updateForm('size', `${(dev.size_bytes / (1024*1024*1024)).toFixed(1)} GB`);
+    }
+  };
+
+  // Load existing cases on mount
+  useEffect(() => {
+    const fetchCases = async () => {
+      try {
+        const list = await getAllCases();
+        setCases(list);
+        if (list.length > 0) {
+          setSelectedCaseId(list[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to load cases:", err);
+      }
+    };
+    fetchCases();
+  }, []);
+
+  const selectSimulationSource = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+      });
+      if (selected) {
+        setSimulationSourcePath(selected);
+        // Autofill Make and Model with filename for easier testing
+        const name = selected.split(/[/\\]/).pop() || 'DRIVE';
+        updateForm('deviceModel', name);
+      }
+    } catch (err) {
+      console.error("Simulation file selection error:", err);
+    }
+  };
+
+  const selectIngestionFile = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+      });
+      if (selected) {
+        setSelectedFilePath(selected);
+        // Extract filename and extension
+        const parts = selected.split(/[/\\]/);
+        const name = parts[parts.length - 1];
+        const extParts = name.split('.');
+        const ext = extParts.length > 1 ? extParts[extParts.length - 1] : 'DAT';
+        setFormData(p => ({
+          ...p,
+          fileName: name,
+          fileFormat: ext.toUpperCase(),
+          fileSource: "Logical File Seizure"
+        }));
+      }
+    } catch (err) {
+      console.error("File selection error:", err);
+    }
+  };
   
   // Terminal Logic
   const [logs, setLogs] = useState([]);
@@ -56,46 +164,149 @@ export const NewIngestionWorkflow = () => {
 
   const updateForm = (field, val) => setFormData(p => ({ ...p, [field]: val }));
 
-  const startTerminalProcess = () => {
+  const startTerminalProcess = async () => {
     if (assetType !== 'FILES' && !formData.writeBlocker) return;
+    
+    // Validation
+    if (caseAnchor === 'EXISTING' && !selectedCaseId) {
+      alert("Please select a case to link.");
+      return;
+    }
+    if (caseAnchor === 'NEW' && (!formData.fir || !formData.io || !formData.jurisdiction)) {
+      alert("Please fill in FIR, IO and Jurisdiction for the new case.");
+      return;
+    }
+    if (assetType === 'FILES' && !selectedFilePath) {
+      alert("Please select a file to ingest.");
+      return;
+    }
+    if (assetType !== 'FILES' && !simulationSourcePath) {
+      alert("Please select a sector/device source file for imaging.");
+      return;
+    }
+
     setIsProcessing(true);
     setLogs(["[SYSTEM] Connecting to secure ingestion daemon..."]);
     
-    let sequence = [];
-    if (assetType === 'FILES') {
-      sequence = [
-        "[+] Ingesting designated logical files...",
-        `[+] Target: ${formData.fileName || 'UNKNOWN_FILE.DAT'}`,
-        "[+] Allocating memory buffer...",
-        "[+] Calculating cryptographic hash (SHA-256)...",
-        "[~] Hashing... 45%",
-        "[~] Hashing... 100%",
-        "[!] SHA-256: 8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
-        "[+] Committed to immutable ledger. Ingestion complete."
-      ];
-    } else {
-      sequence = [
-        `[+] Validating hardware intercept on ${formData.sourceDrive}...`,
-        "[+] Write-Blocker Status: ENGAGED & LOCKED (Read-Only)",
-        `[+] Executing: dc3dd if=${formData.sourceDrive} of=/vault/images/img.dd hash=sha256`,
-        "[~] Copying... 5%",
-        "[~] Copying... 42%",
-        "[~] Copying... 89%",
-        "[~] Copying... 100%",
-        "[!] SHA-256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "[+] Physical asset safe to disconnect. Image secured."
-      ];
-    }
+    let unlisten = null;
+    try {
+      // 1. Resolve case ID
+      let caseId = selectedCaseId;
+      if (caseAnchor === 'NEW') {
+        setLogs(prev => [...prev, "[SYSTEM] Initiating new case entry in database..."]);
+        caseId = await createCase(formData.cnr, formData.fir, formData.io, formData.jurisdiction);
+        setLogs(prev => [...prev, `[SYSTEM] New case initiated: ID = ${caseId}`]);
+      }
+      
+      let hashes = { sha256: '', md5: '' };
+      
+      if (assetType === 'FILES' && selectedFilePath) {
+        setLogs(prev => [...prev, "[SYSTEM] Invoking Rust hashing engine (SHA-256 + MD5)..."]);
+        hashes = await invoke('hash_file', { path: selectedFilePath });
+        setLogs(prev => [...prev, `[!] SHA-256: ${hashes.sha256}`, `[!] MD5: ${hashes.md5}`]);
+      } else {
+        // Set up real bit-stream copying!
+        setLogs(prev => [
+          ...prev, 
+          `[+] Target Source Sector: ${simulationSourcePath}`,
+          `[+] Destination Path: AUTO_GENERATING...`
+        ]);
 
-    sequence.forEach((log, index) => {
+        // Auto-generate destination path in scratch/seized_images folder
+        const timestamp = new Date().getTime();
+        const cleanName = (simulationSourcePath.split(/[/\\]/).pop() || 'image').replace(/\s+/g, '_');
+        const destPath = `d:/Carrer/Projects/Malkhana/scratch/seized_images/${assetType}_${timestamp}_${cleanName}.raw`;
+
+        setLogs(prev => [...prev, `[+] Destination Path Set: ${destPath}`]);
+        setLogs(prev => [...prev, `[+] Listening to progress events...`]);
+
+        // Listen to progress events from Rust
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen('imaging-progress', (event) => {
+          const progress = event.payload;
+          setLogs(prev => {
+            const cleanPrev = prev.filter(l => !l.startsWith('[~]'));
+            return [
+              ...cleanPrev,
+              `[~] Copying... ${progress.percentage.toFixed(1)}% (${(progress.bytes_copied / (1024*1024)).toFixed(1)} MB / ${(progress.total_bytes / (1024*1024)).toFixed(1)} MB) | Speed: ${progress.speed_mb_s.toFixed(2)} MB/s | ETA: ${progress.eta_seconds.toFixed(0)}s`
+            ];
+          });
+        });
+
+        setLogs(prev => [...prev, `[+] Executing forensic image acquisition...`]);
+        const result = await invoke('acquire_forensic_image', {
+          source: simulationSourcePath,
+          destination: destPath
+        });
+
+        hashes = { sha256: result.sha256, md5: result.md5 };
+        setLogs(prev => [
+          ...prev,
+          `[!] SHA-256: ${result.sha256}`,
+          `[!] MD5: ${result.md5}`,
+          `[+] Imaging complete via ${result.engine} engine. Bytes copied: ${result.bytes_copied}`
+        ]);
+      }
+      setComputedHashes(hashes);
+
+      // Serialize witness and device metadata
+      const device_metadata = JSON.stringify({
+        witness1_name: formData.witness1Name || '',
+        witness1_contact: formData.witness1Contact || '',
+        witness2_name: formData.witness2Name || '',
+        witness2_contact: formData.witness2Contact || '',
+        faraday_isolation: formData.faradayIsolation || false,
+        video_recording_ref: formData.videoRecordingRef || '',
+        extraction_type: formData.extractionType,
+        os_version: formData.os,
+        iccid: formData.iccid,
+        time_offset: formData.timeOffset,
+        fps: formData.fps,
+        codec: formData.codec,
+        fs_detected: formData.fs,
+        vidpid: formData.vidpid,
+        capacity: formData.size,
+      });
+
+      // Write to database
+      setLogs(prev => [...prev, "[+] Saving evidence record to SQLCipher database..."]);
+      const input = {
+        case_id: caseId,
+        asset_type: assetType,
+        title: assetType === 'FILES' ? (formData.fileName || 'Logical File') : `${assetType} Seizure (${formData.deviceModel || 'Forensic Device'})`,
+        description: assetType === 'FILES' ? formData.fileSource : `Forensic seizure copy`,
+        tags: JSON.stringify([assetType]),
+        device_make: formData.deviceMake || null,
+        device_model: formData.deviceModel || null,
+        device_color: formData.deviceColor || null,
+        device_serial: formData.serial || null,
+        device_imei: formData.imei || null,
+        physical_condition: formData.condition || null,
+        hash_sha256: hashes.sha256,
+        hash_md5: hashes.md5,
+        seal_number: formData.sealNum || 'SL-UNSPECIFIED',
+        seized_at: new Date().toISOString(),
+        device_metadata: device_metadata
+      };
+
+      await ingestEvidence(input);
+      setLogs(prev => [...prev, "[+] Committed to immutable ledger. Ingestion complete."]);
+      setIsProcessing(false);
+      setHashComplete(true);
+      
+      // Redirect to EVIDENCE_LOG after a short delay
       setTimeout(() => {
-        setLogs(prev => [...prev, log]);
-        if (index === sequence.length - 1) {
-          setIsProcessing(false);
-          setHashComplete(true);
-        }
-      }, (index + 1) * 800);
-    });
+        if (setCurrentView) setCurrentView('EVIDENCE_LOG');
+      }, 1200);
+
+    } catch (err) {
+      setLogs(prev => [...prev, `[ERROR] Ingestion pipeline failed: ${err}`]);
+      setIsProcessing(false);
+    } finally {
+      if (unlisten) {
+        unlisten();
+      }
+    }
   };
 
 
@@ -125,28 +336,46 @@ export const NewIngestionWorkflow = () => {
            </div>
 
            <div className="bg-slate-50 p-6 border border-slate-300 min-h-[120px] transition-all">
-             {caseAnchor === 'EXISTING' ? (
-               <div>
-                 <label className="block text-xs font-bold text-slate-500 mb-2">COMPUTERIZED NODE RECORD (CNR)</label>
-                 <input type="text" value={formData.cnr} onChange={e=>updateForm('cnr', e.target.value)} className="w-full bg-white border-2 border-slate-400 p-3 text-lg font-mono font-bold uppercase outline-none focus:border-slate-800" placeholder="e.g. DL-2026-X8890" />
-               </div>
-             ) : (
-               <div className="grid grid-cols-2 gap-6">
-                 <div className="col-span-2">
-                   <label className="block text-xs font-bold text-slate-500 mb-2">FIR / CRIME NUMBER</label>
-                   <input type="text" value={formData.fir} onChange={e=>updateForm('fir', e.target.value)} className="w-full bg-white border-2 border-slate-400 p-3 font-mono font-bold uppercase outline-none focus:border-slate-800" placeholder="REQUIRED" />
-                 </div>
-                 <div>
-                   <label className="block text-xs font-bold text-slate-500 mb-2">INVESTIGATING OFFICER (IO)</label>
-                   <input type="text" value={formData.io} onChange={e=>updateForm('io', e.target.value)} className="w-full bg-white border-2 border-slate-400 p-3 font-mono font-bold uppercase outline-none focus:border-slate-800" placeholder="REQUIRED" />
-                 </div>
-                 <div>
-                   <label className="block text-xs font-bold text-slate-500 mb-2">JURISDICTION / STATION</label>
-                   <input type="text" value={formData.jurisdiction} onChange={e=>updateForm('jurisdiction', e.target.value)} className="w-full bg-white border-2 border-slate-400 p-3 font-mono font-bold uppercase outline-none focus:border-slate-800" placeholder="REQUIRED" />
-                 </div>
-               </div>
-             )}
-           </div>
+              {caseAnchor === 'EXISTING' ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">SELECT EXISTING CASE FROM ARCHIVE</label>
+                  {cases.length === 0 ? (
+                    <div className="text-sm font-bold text-red-500 py-2">NO CASES DETECTED. CHOOSE "INITIATE NEW CASE" TO CREATE ONE.</div>
+                  ) : (
+                    <select 
+                      value={selectedCaseId} 
+                      onChange={e=>setSelectedCaseId(e.target.value)} 
+                      className="w-full bg-white border-2 border-slate-400 p-3 font-mono font-bold uppercase outline-none focus:border-slate-800 text-slate-800"
+                    >
+                      {cases.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.id} - FIR: {c.fir_number} (IO: {c.investigating_officer})
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-2">COMPUTERIZED NODE RECORD (CNR) - OPTIONAL</label>
+                    <input type="text" value={formData.cnr} onChange={e=>updateForm('cnr', e.target.value)} className="w-full bg-white border-2 border-slate-400 p-3 font-mono font-bold uppercase outline-none focus:border-slate-800" placeholder="e.g. DL-2026-X8890" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-2">FIR / CRIME NUMBER</label>
+                    <input type="text" value={formData.fir} onChange={e=>updateForm('fir', e.target.value)} className="w-full bg-white border-2 border-slate-400 p-3 font-mono font-bold uppercase outline-none focus:border-slate-800" placeholder="REQUIRED" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-2">INVESTIGATING OFFICER (IO)</label>
+                    <input type="text" value={formData.io} onChange={e=>updateForm('io', e.target.value)} className="w-full bg-white border-2 border-slate-400 p-3 font-mono font-bold uppercase outline-none focus:border-slate-800" placeholder="REQUIRED" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-2">JURISDICTION / STATION</label>
+                    <input type="text" value={formData.jurisdiction} onChange={e=>updateForm('jurisdiction', e.target.value)} className="w-full bg-white border-2 border-slate-400 p-3 font-mono font-bold uppercase outline-none focus:border-slate-800" placeholder="REQUIRED" />
+                  </div>
+                </div>
+              )}
+            </div>
         </section>
 
         {/* --- STAGE 2: CLASSIFICATION --- */}
@@ -158,7 +387,7 @@ export const NewIngestionWorkflow = () => {
               <AssetButton type="DISK" icon={HardDrive} label="DISK" assetType={assetType} setAssetType={setAssetType} />
               <AssetButton type="MOBILE" icon={Smartphone} label="MOBILE" assetType={assetType} setAssetType={setAssetType} />
               <AssetButton type="CCTV" icon={Video} label="CCTV" assetType={assetType} setAssetType={setAssetType} />
-              <AssetButton type="PENDRIVE" icon={Usb} label="USB" assetType={assetType} setAssetType={setAssetType} />
+              <AssetButton type="USB" icon={Usb} label="USB" assetType={assetType} setAssetType={setAssetType} />
               <AssetButton type="CLOUD" icon={Cloud} label="CLOUD" assetType={assetType} setAssetType={setAssetType} />
               <AssetButton type="FILES" icon={FileCode2} label="FILES" assetType={assetType} setAssetType={setAssetType} />
            </div>
@@ -191,32 +420,41 @@ export const NewIngestionWorkflow = () => {
                </div>
              )}
 
-             {assetType === 'MOBILE' && (
-               <div className="bg-slate-50 border border-slate-300 p-6 grid grid-cols-2 gap-4">
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">IMEI NUMBER</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" /></div>
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">OS TYPE / VERSION</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" /></div>
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">ICCID (SIM)</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" /></div>
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">EXTRACTION GOAL</label><select className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white"><option>LOGICAL</option><option>PHYSICAL</option><option>FILE_SYSTEM</option></select></div>
-               </div>
-             )}
-
-             {(assetType === 'DISK' || assetType === 'PENDRIVE') && (
-               <div className="bg-slate-50 border border-slate-300 p-6 grid grid-cols-2 gap-4">
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">CAPACITY SIZE</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" placeholder="e.g. 500GB" /></div>
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">FILESYSTEM DETECTED</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" placeholder="NTFS / EXT4" /></div>
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">SERIAL NUMBER</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" /></div>
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">VID/PID</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" /></div>
-               </div>
-             )}
-
-             {assetType === 'CCTV' && (
-               <div className="bg-slate-50 border border-slate-300 p-6 grid grid-cols-2 gap-4">
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">CAMERA ID / LOCATION</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" /></div>
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">TIME OFFSET TO IST</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" placeholder="e.g. -00:05:12" /></div>
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">NATIVE FPS</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" /></div>
-                 <div><label className="block text-[10px] font-bold text-slate-500 mb-1">CODEC FORMAT</label><input type="text" className="w-full border border-slate-400 p-2 font-mono text-sm uppercase" placeholder="H.264 / H.265" /></div>
-               </div>
-             )}
+              {assetType === 'MOBILE' && (
+                <div className="bg-slate-50 border border-slate-300 p-6 grid grid-cols-2 gap-4">
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">IMEI NUMBER</label><input type="text" value={formData.imei} onChange={e=>updateForm('imei', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">OS TYPE / VERSION</label><input type="text" value={formData.os} onChange={e=>updateForm('os', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">ICCID (SIM)</label><input type="text" value={formData.iccid} onChange={e=>updateForm('iccid', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">EXTRACTION GOAL</label><select value={formData.extractionType} onChange={e=>updateForm('extractionType', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800"><option>LOGICAL</option><option>PHYSICAL</option><option>FILE_SYSTEM</option></select></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">MAKE (e.g. Apple)</label><input type="text" value={formData.deviceMake} onChange={e=>updateForm('deviceMake', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">MODEL (e.g. iPhone 15)</label><input type="text" value={formData.deviceModel} onChange={e=>updateForm('deviceModel', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div className="col-span-2"><label className="block text-[10px] font-bold text-slate-500 mb-1">COLOR</label><input type="text" value={formData.deviceColor} onChange={e=>updateForm('deviceColor', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                </div>
+              )}
+ 
+              {(assetType === 'DISK' || assetType === 'USB') && (
+                <div className="bg-slate-50 border border-slate-300 p-6 grid grid-cols-2 gap-4">
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">CAPACITY SIZE</label><input type="text" value={formData.size} onChange={e=>updateForm('size', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" placeholder="e.g. 500GB" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">FILESYSTEM DETECTED</label><input type="text" value={formData.fs} onChange={e=>updateForm('fs', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" placeholder="NTFS / EXT4" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">SERIAL NUMBER</label><input type="text" value={formData.serial} onChange={e=>updateForm('serial', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">VID/PID</label><input type="text" value={formData.vidpid} onChange={e=>updateForm('vidpid', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">MAKE</label><input type="text" value={formData.deviceMake} onChange={e=>updateForm('deviceMake', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">MODEL</label><input type="text" value={formData.deviceModel} onChange={e=>updateForm('deviceModel', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div className="col-span-2"><label className="block text-[10px] font-bold text-slate-500 mb-1">COLOR</label><input type="text" value={formData.deviceColor} onChange={e=>updateForm('deviceColor', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                </div>
+              )}
+ 
+              {assetType === 'CCTV' && (
+                <div className="bg-slate-50 border border-slate-300 p-6 grid grid-cols-2 gap-4">
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">CAMERA ID / LOCATION</label><input type="text" value={formData.camId} onChange={e=>updateForm('camId', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">TIME OFFSET TO IST</label><input type="text" value={formData.timeOffset} onChange={e=>updateForm('timeOffset', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" placeholder="e.g. -00:05:12" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">NATIVE FPS</label><input type="text" value={formData.fps} onChange={e=>updateForm('fps', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">CODEC FORMAT</label><input type="text" value={formData.codec} onChange={e=>updateForm('codec', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" placeholder="H.264 / H.265" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">MAKE</label><input type="text" value={formData.deviceMake} onChange={e=>updateForm('deviceMake', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div><label className="block text-[10px] font-bold text-slate-500 mb-1">MODEL</label><input type="text" value={formData.deviceModel} onChange={e=>updateForm('deviceModel', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                  <div className="col-span-2"><label className="block text-[10px] font-bold text-slate-500 mb-1">COLOR</label><input type="text" value={formData.deviceColor} onChange={e=>updateForm('deviceColor', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-sm uppercase bg-white outline-none focus:border-slate-800" /></div>
+                </div>
+              )}
            </div>
         </section>
 
@@ -248,6 +486,53 @@ export const NewIngestionWorkflow = () => {
                  <p className="text-[9px] text-slate-400 mt-2 text-right">SYSTEM TIME LOCKED. CANNOT BE OVERRIDDEN.</p>
                </div>
              </div>
+
+             <div className="grid grid-cols-2 gap-8 mt-6 border-t border-slate-200 pt-6">
+               <div>
+                 <h4 className="text-xs font-black text-slate-800 tracking-wider mb-4">PANCH WITNESS 1_</h4>
+                 <div className="space-y-3">
+                   <div>
+                     <label className="block text-[9px] font-bold text-slate-500 mb-1">WITNESS NAME</label>
+                     <input type="text" value={formData.witness1Name} onChange={e=>updateForm('witness1Name', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-xs uppercase bg-white outline-none focus:border-slate-800 placeholder:text-slate-300" placeholder="NAME OF WITNESS 1" />
+                   </div>
+                   <div>
+                     <label className="block text-[9px] font-bold text-slate-500 mb-1">CONTACT / ADDRESS</label>
+                     <input type="text" value={formData.witness1Contact} onChange={e=>updateForm('witness1Contact', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-xs uppercase bg-white outline-none focus:border-slate-800 placeholder:text-slate-300" placeholder="CONTACT OF WITNESS 1" />
+                   </div>
+                 </div>
+               </div>
+               
+               <div>
+                 <h4 className="text-xs font-black text-slate-800 tracking-wider mb-4">PANCH WITNESS 2_</h4>
+                 <div className="space-y-3">
+                   <div>
+                     <label className="block text-[9px] font-bold text-slate-500 mb-1">WITNESS NAME</label>
+                     <input type="text" value={formData.witness2Name} onChange={e=>updateForm('witness2Name', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-xs uppercase bg-white outline-none focus:border-slate-800 placeholder:text-slate-300" placeholder="NAME OF WITNESS 2" />
+                   </div>
+                   <div>
+                     <label className="block text-[9px] font-bold text-slate-500 mb-1">CONTACT / ADDRESS</label>
+                     <input type="text" value={formData.witness2Contact} onChange={e=>updateForm('witness2Contact', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-xs uppercase bg-white outline-none focus:border-slate-800 placeholder:text-slate-300" placeholder="CONTACT OF WITNESS 2" />
+                   </div>
+                 </div>
+               </div>
+             </div>
+
+             <div className="grid grid-cols-2 gap-8 mt-6 border-t border-slate-200 pt-6">
+               <div>
+                 <label className="flex items-center gap-3 cursor-pointer group bg-slate-50 p-3 border border-slate-300 hover:border-slate-800 transition-colors">
+                   <div className={`w-5 h-5 border-2 flex items-center justify-center transition-colors ${formData.faradayIsolation ? 'border-slate-800' : 'border-slate-400'}`}>
+                     <div className={`w-full h-full bg-slate-800 transition-transform duration-100 ${formData.faradayIsolation ? 'scale-100' : 'scale-0'}`} />
+                   </div>
+                   <input type="checkbox" className="hidden" checked={formData.faradayIsolation} onChange={() => updateForm('faradayIsolation', !formData.faradayIsolation)} />
+                   <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">FARADAY BAG ISOLATION ENGAGED</span>
+                 </label>
+               </div>
+               
+               <div>
+                 <label className="block text-[9px] font-bold text-slate-500 mb-1">VIDEO SEIZURE REFERENCE RECORD (PATH/ID)</label>
+                 <input type="text" value={formData.videoRecordingRef} onChange={e=>updateForm('videoRecordingRef', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-xs uppercase bg-white outline-none focus:border-slate-800 placeholder:text-slate-300" placeholder="e.g. VID-20260520-IO-092" />
+               </div>
+             </div>
           </section>
         )}
 
@@ -261,28 +546,77 @@ export const NewIngestionWorkflow = () => {
 
             {/* Contextual Inputs before Execution */}
             {assetType === 'FILES' ? (
-              <div className="mb-6 border-2 border-dashed border-slate-600 bg-slate-800/50 p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-800 transition-colors">
+              <div 
+                onClick={selectIngestionFile}
+                className="mb-6 border-2 border-dashed border-slate-600 bg-slate-800/50 p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-800 transition-colors"
+              >
                  <UploadCloud size={32} className="text-slate-400 mb-4" />
-                 <span className="font-bold tracking-widest text-sm text-slate-300">DROP_LOGICAL_FILES_HERE</span>
+                 {selectedFilePath ? (
+                   <div className="text-center">
+                     <span className="font-bold font-mono tracking-widest text-xs text-[#0ea5e9] block break-all">
+                       SELECTED: {selectedFilePath}
+                     </span>
+                     <span className="text-[10px] text-slate-400 mt-2 block font-bold">CLICK TO SELECT ANOTHER FILE</span>
+                   </div>
+                 ) : (
+                   <span className="font-bold tracking-widest text-sm text-slate-300">
+                     CLICK_TO_SELECT_FILE_FOR_INGESTION
+                   </span>
+                 )}
               </div>
             ) : (
-              <div className="mb-6 grid grid-cols-2 gap-6 items-end border-b border-slate-700 pb-6">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 mb-2">SOURCE BLOCK DEVICE</label>
-                  <select value={formData.sourceDrive} onChange={e=>updateForm('sourceDrive', e.target.value)} className="w-full bg-slate-800 border border-slate-600 p-3 font-mono text-sm text-white outline-none focus:border-[#0ea5e9]">
-                    <option>/dev/sdb (1.0 TB)</option>
-                    <option>/dev/sdc (256 GB)</option>
-                    <option>/dev/nvme0n1 (512 GB)</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="flex items-center gap-3 cursor-pointer group bg-slate-800 p-3 border border-slate-600 hover:border-[#0ea5e9] transition-colors">
-                    <div className={`w-5 h-5 border-2 flex items-center justify-center transition-colors ${formData.writeBlocker ? 'border-[#0ea5e9]' : 'border-slate-500'}`}>
-                      <div className={`w-full h-full bg-[#0ea5e9] transition-transform duration-100 ${formData.writeBlocker ? 'scale-100' : 'scale-0'}`} />
+              <div className="mb-6 border-b border-slate-700 pb-6 space-y-4">
+                <div className="grid grid-cols-2 gap-6 items-end">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 mb-2">SOURCE BLOCK DEVICE</label>
+                    <div className="flex gap-2">
+                      <select 
+                        value={formData.sourceDrive} 
+                        onChange={e => handleDeviceChange(e.target.value)} 
+                        className="flex-1 bg-slate-800 border border-slate-600 p-3 font-mono text-xs text-white outline-none focus:border-[#0ea5e9]"
+                      >
+                        {detectedDevices.length === 0 ? (
+                          <option value="">-- NO DRIVES DETECTED --</option>
+                        ) : (
+                          detectedDevices.map(d => (
+                            <option key={d.path} value={d.path}>
+                              {d.name} - {d.model} ({(d.size_bytes / (1024*1024*1024)).toFixed(1)} GB) [{d.path}]
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      <button 
+                        type="button"
+                        onClick={refreshDrives}
+                        disabled={detecting}
+                        className="px-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 font-bold text-[10px] tracking-wider uppercase text-white"
+                      >
+                        {detecting ? 'SCANNING...' : 'SCAN'}
+                      </button>
                     </div>
-                    <input type="checkbox" className="hidden" checked={formData.writeBlocker} onChange={() => updateForm('writeBlocker', !formData.writeBlocker)} />
-                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">WRITE_BLOCKER_ENGAGED</span>
-                  </label>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-3 cursor-pointer group bg-slate-800 p-3 border border-slate-600 hover:border-[#0ea5e9] transition-colors">
+                      <div className={`w-5 h-5 border-2 flex items-center justify-center transition-colors ${formData.writeBlocker ? 'border-[#0ea5e9]' : 'border-slate-500'}`}>
+                        <div className={`w-full h-full bg-[#0ea5e9] transition-transform duration-100 ${formData.writeBlocker ? 'scale-100' : 'scale-0'}`} />
+                      </div>
+                      <input type="checkbox" className="hidden" checked={formData.writeBlocker} onChange={() => updateForm('writeBlocker', !formData.writeBlocker)} />
+                      <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">WRITE_BLOCKER_ENGAGED</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="border border-slate-700 bg-slate-800/40 p-4">
+                  <label className="block text-[10px] font-bold text-[#0ea5e9] mb-2 tracking-widest">PORTABLE IMAGE SECTOR SOURCE SELECTOR</label>
+                  <div className="flex gap-4">
+                    <button onClick={selectSimulationSource} className="px-4 py-2 bg-slate-700 border border-slate-500 text-xs font-bold hover:bg-slate-600 transition-colors uppercase tracking-wider">
+                      SELECT SOURCE FILE/DRIVE
+                    </button>
+                    <div className="flex-1 bg-black/50 border border-slate-700 px-3 py-2 text-xs font-mono text-slate-300 truncate flex items-center">
+                      {simulationSourcePath || 'AWAITING SECTOR CLONE SOURCE PATH...'}
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-slate-500 mt-2">Required for Windows testing fallback or selecting raw logical sectors.</p>
                 </div>
               </div>
             )}

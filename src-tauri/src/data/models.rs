@@ -194,6 +194,7 @@ pub struct EvidenceCard {
     pub image_comp_type: String,
     pub stamp: EvidenceStamp,
     pub alert: Option<String>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

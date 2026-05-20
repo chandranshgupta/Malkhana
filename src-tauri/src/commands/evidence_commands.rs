@@ -3,6 +3,12 @@ use crate::data::database::DbState;
 use crate::data::models::{EvidenceCard, EvidenceStamp};
 use crate::data::repository;
 
+#[tauri::command]
+pub fn get_evidence_details(id: String, db: State<DbState>) -> Result<Option<crate::data::models::Evidence>, String> {
+    let conn = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
+    repository::get_evidence_by_id(&conn, &id).map_err(|e| format!("Query failed: {}", e))
+}
+
 /// Returns evidence items formatted for the EvidenceLog UI view.
 /// Reads from the database and transforms into the card format expected by React.
 #[tauri::command]
@@ -57,16 +63,128 @@ pub fn get_evidence_log(db: State<DbState>) -> Result<Vec<EvidenceCard>, String>
                 rotate: stamp_rotate.to_string(),
             },
             alert,
+            created_at: ev.created_at,
         }
     }).collect();
 
     Ok(cards)
 }
 
+#[derive(serde::Deserialize)]
+pub struct IngestEvidenceInput {
+    pub case_id: String,
+    pub asset_type: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub tags: Option<String>,
+    pub device_make: Option<String>,
+    pub device_model: Option<String>,
+    pub device_color: Option<String>,
+    pub device_serial: Option<String>,
+    pub device_imei: Option<String>,
+    pub physical_condition: Option<String>,
+    pub hash_sha256: Option<String>,
+    pub hash_md5: Option<String>,
+    pub seal_number: Option<String>,
+    pub seized_at: Option<String>,
+    pub device_metadata: Option<String>,
+}
+
 #[tauri::command]
-pub fn ingest_evidence(case_id: String, asset_type: String) -> Result<String, String> {
-    // TODO: Phase 2 — full evidence ingestion with file copy + hash computation
-    Ok(format!("Ingested asset type {} for case {}", asset_type, case_id))
+pub fn ingest_evidence(
+    input: IngestEvidenceInput,
+    state: State<'_, DbState>,
+) -> Result<String, String> {
+    let conn = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    
+    let now = crate::core::time_authority::current_timestamp_iso8601();
+    let evidence_id = format!("EVID-{}", uuid::Uuid::new_v4().simple().to_string()[..8].to_uppercase());
+    
+    // Find the first free location R1-C1 to R10-C15 not present or empty in archive_matrix
+    let mut allocated_location = None;
+    for r in 1..=10 {
+        for c in 1..=15 {
+            let loc = format!("R{}-C{}", r, c);
+            let exists: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM archive_matrix WHERE location = ?1 AND evidence_id IS NOT NULL",
+                rusqlite::params![loc],
+                |row| row.get(0)
+            ).unwrap_or(0);
+            
+            if exists == 0 {
+                allocated_location = Some(loc);
+                break;
+            }
+        }
+        if allocated_location.is_some() {
+            break;
+        }
+    }
+
+    let new_evidence = crate::data::models::Evidence {
+        id: evidence_id.clone(),
+        case_id: input.case_id.clone(),
+        asset_type: input.asset_type.clone(),
+        title: input.title.clone(),
+        description: input.description,
+        tags: input.tags,
+        device_make: input.device_make,
+        device_model: input.device_model,
+        device_color: input.device_color,
+        device_serial: input.device_serial,
+        device_imei: input.device_imei,
+        physical_condition: input.physical_condition,
+        hash_sha256: input.hash_sha256.clone(),
+        hash_md5: input.hash_md5,
+        hash_sha512: None,
+        seal_number: input.seal_number.clone(),
+        storage_location: allocated_location.clone(),
+        device_metadata: input.device_metadata,
+        status: "ACTIVE".to_string(),
+        seized_at: Some(input.seized_at.unwrap_or_else(|| now.clone())),
+        created_at: now.clone(),
+    };
+
+    repository::insert_evidence(&conn, &new_evidence).map_err(|e| format!("Failed to insert evidence: {}", e))?;
+    
+    // Insert archive slot in archive_matrix
+    if let Some(ref loc) = allocated_location {
+        conn.execute(
+            "INSERT OR REPLACE INTO archive_matrix (location, evidence_id, vault_level, status, assigned_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![loc, evidence_id.clone(), 3, "SEALED", now.clone()],
+        ).map_err(|e| format!("Failed to assign archive slot: {}", e))?;
+    }
+
+    // Add initial custody chain entry
+    let custody_id = format!("CUST-{}", uuid::Uuid::new_v4().simple().to_string()[..8].to_uppercase());
+    let initial_custody = crate::data::models::CustodyEntry {
+        id: custody_id,
+        evidence_id: evidence_id.clone(),
+        from_person: None,
+        to_person: "SYSTEM_USER".to_string(), // Seizing Officer / Intake Officer
+        role: "SEIZING_OFFICER".to_string(),
+        organization: Some("Delhi Police".to_string()),
+        action: "SEIZED".to_string(),
+        hash_at_transfer: input.hash_sha256.clone(),
+        hash_verified: true,
+        notes: Some("Initial forensic seizure and ingestion into vault".to_string()),
+        signature: Some("DIGITAL_SIGNATURE_OK".to_string()),
+        timestamp: now.clone(),
+    };
+    repository::insert_custody_entry(&conn, &initial_custody).map_err(|e| format!("Failed to write custody log: {}", e))?;
+
+    // Log the event in the audit trail
+    repository::append_audit_log(
+        &conn,
+        "EVIDENCE_INGESTED",
+        "EVIDENCE",
+        &evidence_id,
+        "SYSTEM_USER",
+        Some(&format!("Evidence {} (type {}) ingested for case {}", evidence_id, input.asset_type, input.case_id))
+    ).map_err(|e| format!("Failed to write audit log: {}", e))?;
+
+    Ok(evidence_id)
 }
 
 #[tauri::command]
@@ -79,3 +197,27 @@ pub fn hash_file(path: String) -> Result<serde_json::Value, String> {
         Err(e) => Err(format!("Hashing failed: {}", e)),
     }
 }
+
+#[tauri::command]
+pub fn acquire_forensic_image(
+    window: tauri::Window,
+    source: String,
+    destination: String,
+) -> Result<crate::core::imaging_engine::ImagingResult, String> {
+    crate::core::imaging_engine::run_forensic_imaging(window, source, destination)
+}
+
+#[tauri::command]
+pub fn detect_devices() -> Result<Vec<crate::core::device_detector::RemovableDevice>, String> {
+    crate::core::device_detector::detect_external_drives()
+}
+
+#[tauri::command]
+pub fn verify_forensic_integrity(
+    h1: String,
+    h2: String,
+    h3: Option<String>,
+) -> crate::core::integrity_checker::HashComparisonResult {
+    crate::core::integrity_checker::compare_hashes(&h1, &h2, h3.as_deref())
+}
+

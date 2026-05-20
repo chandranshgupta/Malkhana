@@ -35,10 +35,7 @@ pub fn generate_certificate(
 
     // 2. Generate certificate ID and timestamp (IST)
     let cert_id = format!("CERT-{}", uuid::Uuid::new_v4());
-    let timestamp = chrono::Utc::now()
-        .with_timezone(&chrono::FixedOffset::east_opt(5 * 3600 + 30 * 60).unwrap())
-        .format("%Y-%m-%dT%H:%M:%S+05:30")
-        .to_string();
+    let timestamp = crate::core::time_authority::current_timestamp_iso8601();
 
     // 3. Build certificate with cryptographic seal
     let cert = certificate_engine::build_certificate(

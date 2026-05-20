@@ -17,3 +17,42 @@
   60% { opacity: 1; transform: scale(0.9) rotate(15deg); }
   100% { opacity: 0.9; transform: scale(1) rotate(15deg); }
 }
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 1.5cm;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+  
+  /* Make sure printing container and its children are visible */
+  #certificate-print-area,
+  #certificate-print-area *,
+  #cc1-print-area,
+  #cc1-print-area * {
+    visibility: visible;
+  }
+
+  /* Reset backgrounds and position the certificate/form correctly */
+  #certificate-print-area,
+  #cc1-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+
+  /* We use print:hidden and print:shadow-none etc inline from Tailwind
+     but enforce page breaks where specified */
+  .page-break-after {
+    page-break-after: always;
+  }
+}

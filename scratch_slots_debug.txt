@@ -1,0 +1,58 @@
+Slots count: 5
+Slots: [
+    ArchiveSlot {
+        location: "R5-C8",
+        evidence_id: Some(
+            "S50-9926-X1",
+        ),
+        vault_level: 3,
+        status: "SEALED",
+        assigned_at: Some(
+            "2026-05-17T14:30:00+05:30",
+        ),
+    },
+    ArchiveSlot {
+        location: "R2-C3",
+        evidence_id: Some(
+            "MOB-1142-922",
+        ),
+        vault_level: 3,
+        status: "SEALED",
+        assigned_at: Some(
+            "2026-05-17T14:30:00+05:30",
+        ),
+    },
+    ArchiveSlot {
+        location: "R8-C12",
+        evidence_id: Some(
+            "DVR-4402-2Y",
+        ),
+        vault_level: 3,
+        status: "SEALED",
+        assigned_at: Some(
+            "2026-05-17T14:30:00+05:30",
+        ),
+    },
+    ArchiveSlot {
+        location: "R1-C1",
+        evidence_id: Some(
+            "EVID-C79D3FBC",
+        ),
+        vault_level: 3,
+        status: "SEALED",
+        assigned_at: Some(
+            "2026-05-20T16:31:43+05:30",
+        ),
+    },
+    ArchiveSlot {
+        location: "R1-C2",
+        evidence_id: Some(
+            "EVID-F66F8524",
+        ),
+        vault_level: 3,
+        status: "SEALED",
+        assigned_at: Some(
+            "2026-05-20T16:31:43+05:30",
+        ),
+    },
+]

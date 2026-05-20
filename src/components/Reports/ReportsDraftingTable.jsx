@@ -6,6 +6,7 @@ import {
   Fingerprint 
 } from 'lucide-react';
 import { Stamp } from '../shared/Stamp';
+import { getEvidenceForCertificate, generateCertificate, getEvidenceDetails } from '../../api/invoke';
 
 export const IndCheckbox = ({ label, checked, onChange, disabled }) => (
   <label className={`flex items-center gap-3 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer group'}`}>
@@ -17,9 +18,30 @@ export const IndCheckbox = ({ label, checked, onChange, disabled }) => (
   </label>
 );
 
-export const ReportsDraftingTable = () => {
+export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearInitial }) => {
+  const [availableEvidence, setAvailableEvidence] = useState([]);
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
+  const [originalHash, setOriginalHash] = useState('');
   const [data, setData] = useState({
-    custodianName: '', designation: '', sealNumber: '', deviceType: 'MOBILE_DEVICE', controlType: 'MAINTAINED', examinerName: '', labId: 'LAB-CYB-09', hashAlg: 'SHA-256',
+    custodianName: '',
+    custodianParent: '',
+    custodianAddress: '',
+    designation: '',
+    sealNumber: '',
+    deviceType: 'MOBILE_DEVICE',
+    deviceMake: '',
+    deviceModel: '',
+    deviceColor: '',
+    deviceSerial: '',
+    deviceImei: '',
+    deviceDescription: '',
+    controlType: 'MAINTAINED',
+    examinerName: currentUser ? (currentUser.full_name || currentUser.username) : '',
+    examinerParent: '',
+    examinerAddress: '',
+    labId: 'LAB-CYB-09',
+    hashAlg: 'SHA-256',
+    place: 'DELHI',
   });
   const [isPartAComplete, setIsPartAComplete] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
@@ -28,11 +50,58 @@ export const ReportsDraftingTable = () => {
   const [finalHash, setFinalHash] = useState('');
 
   useEffect(() => {
+    // Load evidence dropdown items on mount
+    getEvidenceForCertificate().then(list => {
+      setAvailableEvidence(list);
+      if (initialEvidenceId) {
+        const item = list.find(e => e.id === initialEvidenceId);
+        if (item) {
+          setSelectedEvidenceId(initialEvidenceId);
+          setOriginalHash(item.hash_sha256 || 'NO_HASH_AVAILABLE');
+          
+          let mappedType = 'COMPUTER_SYSTEM';
+          if (item.asset_type === 'DISK' || item.asset_type === 'COMPUTER') mappedType = 'COMPUTER_SYSTEM';
+          else if (item.asset_type === 'MOBILE') mappedType = 'MOBILE_DEVICE';
+          else if (item.asset_type === 'CCTV') mappedType = 'CCTV_DVR_NVR';
+
+          setData(prev => ({
+            ...prev,
+            sealNumber: item.seal_number || '',
+            deviceType: mappedType
+          }));
+
+          // Load details
+          getEvidenceDetails(initialEvidenceId).then(details => {
+            if (details) {
+              setData(prev => ({
+                ...prev,
+                sealNumber: details.seal_number || item.seal_number || '',
+                deviceMake: details.device_make || '',
+                deviceModel: details.device_model || '',
+                deviceColor: details.device_color || '',
+                deviceSerial: details.device_serial || '',
+                deviceImei: details.device_imei || '',
+                deviceDescription: details.description || '',
+              }));
+            }
+          }).catch(console.error);
+        }
+        if (onClearInitial) onClearInitial();
+      }
+    }).catch(console.error);
+  }, [initialEvidenceId]);
+
+  useEffect(() => {
     let timer;
     if (isSigning && !isLocked) {
       timer = setInterval(() => {
         setSignProgress(p => {
-          if (p >= 100) { setIsLocked(true); setFinalHash('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'); return 100; }
+          if (p >= 100) { 
+            // Progress hit 100%, trigger sealing
+            setIsLocked(true); 
+            handleSealDocument();
+            return 100; 
+          }
           return p + 3;
         });
       }, 100);
@@ -42,12 +111,83 @@ export const ReportsDraftingTable = () => {
       }
     }
     return () => {
-      if (timer) clearTimeout(timer); // clearTimeout works for both setInterval and setTimeout in browser
+      if (timer) clearTimeout(timer);
     };
   }, [isSigning, isLocked]);
 
+  const handleSealDocument = async () => {
+    try {
+      const input = {
+        evidence_id: selectedEvidenceId,
+        custodian_name: data.custodianName,
+        custodian_parent: data.custodianParent || null,
+        custodian_address: data.custodianAddress || null,
+        designation: data.designation,
+        seal_number: data.sealNumber,
+        device_type: data.deviceType,
+        device_description: `${data.deviceMake || ''} ${data.deviceModel || ''} ${data.deviceColor ? '(' + data.deviceColor + ')' : ''} S/N:${data.deviceSerial || ''} IMEI:${data.deviceImei || ''} ${data.deviceDescription || ''}`.trim() || null,
+        control_type: data.controlType,
+        examiner_name: data.examinerName,
+        examiner_parent: data.examinerParent || null,
+        examiner_address: data.examinerAddress || null,
+        lab_id: data.labId,
+        hash_algorithm: data.hashAlg,
+      };
+      const cert = await generateCertificate(input);
+      setFinalHash(cert.document_hash);
+      
+      // Auto-trigger print with a slight delay for the stamp-drop animation
+      setTimeout(() => {
+        window.print();
+      }, 800);
+    } catch (e) {
+      console.error("Failed to generate certificate:", e);
+      setIsLocked(false);
+      setSignProgress(0);
+    }
+  };
+
+  const handleEvidenceSelect = async (id) => {
+    setSelectedEvidenceId(id);
+    if (!id) {
+      setOriginalHash('');
+      return;
+    }
+    const item = availableEvidence.find(e => e.id === id);
+    if (item) {
+      setOriginalHash(item.hash_sha256 || 'NO_HASH_AVAILABLE');
+      updateField('sealNumber', item.seal_number || '');
+      // Map basic asset types to cert device categories
+      let mappedType = 'COMPUTER_SYSTEM';
+      if (item.asset_type === 'DISK' || item.asset_type === 'COMPUTER') mappedType = 'COMPUTER_SYSTEM';
+      else if (item.asset_type === 'MOBILE') mappedType = 'MOBILE_DEVICE';
+      else if (item.asset_type === 'CCTV') mappedType = 'CCTV_DVR_NVR';
+      
+      updateField('deviceType', mappedType);
+    }
+
+    try {
+      const details = await getEvidenceDetails(id);
+      if (details) {
+        setData(prev => ({
+          ...prev,
+          sealNumber: details.seal_number || prev.sealNumber || '',
+          deviceMake: details.device_make || '',
+          deviceModel: details.device_model || '',
+          deviceColor: details.device_color || '',
+          deviceSerial: details.device_serial || '',
+          deviceImei: details.device_imei || '',
+          deviceDescription: details.description || '',
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to load evidence details:", err);
+    }
+  };
+
   const updateField = (field, value) => { if (!isLocked) setData(prev => ({ ...prev, [field]: value })); };
-  const missingA = !data.custodianName || !data.sealNumber || !data.designation;
+  
+  const missingA = !selectedEvidenceId || !data.custodianName || !data.sealNumber || !data.designation;
   const missingB = !data.examinerName || !data.labId;
   const crosshatchClass = "bg-[repeating-linear-gradient(-45deg,transparent,transparent_4px,rgba(220,38,38,0.15)_4px,rgba(220,38,38,0.15)_8px)] border-red-400";
   const getInputClass = (val) => `w-full bg-white/50 border outline-none px-3 py-2 text-sm font-bold text-slate-800 transition-all uppercase placeholder:text-slate-400 placeholder:font-normal ${!val && !isLocked ? crosshatchClass : 'border-slate-400 focus:border-slate-800 focus:bg-white'}`;
@@ -56,25 +196,49 @@ export const ReportsDraftingTable = () => {
     <div className="flex-1 flex overflow-hidden relative z-10">
       {/* Left Panel: Inputs */}
       <div className={`w-[450px] border-r border-slate-400 flex flex-col relative z-20 ${isLocked ? 'grayscale pointer-events-none' : ''}`}>
-        <div className="p-6 border-b border-slate-400 bg-[#e2e8f0]/80 backdrop-blur-sm">
+        <div className="p-6 border-b border-slate-400 bg-[#e2e8f0]/80 backdrop-blur-sm flex-shrink-0">
           <h2 className="text-xl font-light tracking-tight flex items-center gap-3">
             <FileSignature className="text-slate-700" size={24} />
             <span className="font-bold text-slate-800">SEC_63_DRAFTING</span>
           </h2>
           <p className="text-xs text-slate-600 mt-2 font-mono uppercase tracking-widest">Procedural Control Vault</p>
         </div>
+        
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+          {/* PART A FORM */}
           <div className="border border-slate-400 bg-white shadow-[4px_4px_0px_rgba(100,116,139,0.1)] relative">
             <div className="absolute top-0 left-0 w-1 h-full bg-slate-800"></div>
             <div className="bg-slate-100 border-b border-slate-300 px-4 py-3 flex justify-between items-center">
               <h3 className="font-bold text-sm text-slate-800 tracking-widest">PART A: CUSTODIAN</h3>
               {isPartAComplete && <CheckCircle2 size={16} className="text-slate-600" />}
             </div>
+            
             <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">EVIDENCE SOURCE</label>
+                <select value={selectedEvidenceId} onChange={e => handleEvidenceSelect(e.target.value)} disabled={isLocked} className={getInputClass(selectedEvidenceId)}>
+                  <option value="">-- SELECT EVIDENCE --</option>
+                  {availableEvidence.map(ev => (
+                    <option key={ev.id} value={ev.id}>{ev.title} ({ev.case_fir})</option>
+                  ))}
+                </select>
+              </div>
+              
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 mb-1">OFFICER / CUSTODIAN NAME</label>
                 <input type="text" value={data.custodianName} onChange={e => updateField('custodianName', e.target.value)} className={getInputClass(data.custodianName)} placeholder="REQUIRED" />
               </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">CUSTODIAN PARENT (S/O, D/O, W/O)</label>
+                <input type="text" value={data.custodianParent} onChange={e => updateField('custodianParent', e.target.value)} className={getInputClass(data.custodianParent)} placeholder="CUSTODIAN'S PARENT/SPOUSE" />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">CUSTODIAN ADDRESS</label>
+                <input type="text" value={data.custodianAddress} onChange={e => updateField('custodianAddress', e.target.value)} className={getInputClass(data.custodianAddress)} placeholder="RESIDENTIAL/OFFICE ADDRESS" />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1">DESIGNATION</label>
@@ -85,6 +249,43 @@ export const ReportsDraftingTable = () => {
                   <input type="text" value={data.sealNumber} onChange={e => updateField('sealNumber', e.target.value)} className={getInputClass(data.sealNumber)} placeholder="REQUIRED" />
                 </div>
               </div>
+
+              <div className="pt-2 border-t border-slate-200 space-y-4">
+                <h4 className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">DEVICE SPECIFICS</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">MAKE</label>
+                    <input type="text" value={data.deviceMake} onChange={e => updateField('deviceMake', e.target.value)} className={getInputClass(data.deviceMake)} placeholder="MAKE" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">MODEL</label>
+                    <input type="text" value={data.deviceModel} onChange={e => updateField('deviceModel', e.target.value)} className={getInputClass(data.deviceModel)} placeholder="MODEL" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">COLOR</label>
+                    <input type="text" value={data.deviceColor} onChange={e => updateField('deviceColor', e.target.value)} className={getInputClass(data.deviceColor)} placeholder="COLOR" />
+                  </div>
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">SERIAL NUMBER</label>
+                    <input type="text" value={data.deviceSerial} onChange={e => updateField('deviceSerial', e.target.value)} className={getInputClass(data.deviceSerial)} placeholder="SERIAL" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 mb-1">IMEI/UID/MAC</label>
+                  <input type="text" value={data.deviceImei} onChange={e => updateField('deviceImei', e.target.value)} className={getInputClass(data.deviceImei)} placeholder="IMEI / MAC ADDRESS" />
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-500 mb-1">ANY OTHER INFO / DESCRIPTION</label>
+                  <input type="text" value={data.deviceDescription} onChange={e => updateField('deviceDescription', e.target.value)} className={getInputClass(data.deviceDescription)} placeholder="ADDITIONAL DEVICE DESCRIPTION" />
+                </div>
+              </div>
+
               <div className="pt-2 border-t border-slate-200">
                 <label className="block text-[10px] font-bold text-slate-500 mb-3">DEVICE CATEGORY</label>
                 <div className="space-y-3">
@@ -93,6 +294,7 @@ export const ReportsDraftingTable = () => {
                   <IndCheckbox label="CCTV_DVR_NVR" checked={data.deviceType === 'CCTV_DVR_NVR'} onChange={() => updateField('deviceType', 'CCTV_DVR_NVR')} />
                 </div>
               </div>
+              
               {!isPartAComplete ? (
                 <button onClick={() => !missingA && setIsPartAComplete(true)} disabled={missingA} className={`w-full mt-4 py-3 font-bold text-sm transition-all border ${missingA ? 'bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed' : 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700 shadow-[2px_2px_0px_rgba(100,116,139,0.5)]'}`}>LOCK PART A & PROCEED</button>
               ) : (
@@ -100,17 +302,31 @@ export const ReportsDraftingTable = () => {
               )}
             </div>
           </div>
+          
+          {/* PART B FORM */}
           <div className={`border border-slate-400 bg-white relative transition-all ${isPartAComplete ? 'shadow-[4px_4px_0px_rgba(100,116,139,0.1)] opacity-100' : 'opacity-50 pointer-events-none'}`}>
              <div className="absolute top-0 left-0 w-1 h-full bg-slate-500"></div>
              <div className="bg-slate-100 border-b border-slate-300 px-4 py-3 flex justify-between items-center">
               <h3 className="font-bold text-sm text-slate-800 tracking-widest">PART B: EXPERT</h3>
               {!isPartAComplete && <Lock size={14} className="text-slate-400" />}
             </div>
+            
             <div className="p-4 space-y-4">
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 mb-1">EXAMINER NAME</label>
                 <input type="text" value={data.examinerName} onChange={e => updateField('examinerName', e.target.value)} className={getInputClass(data.examinerName)} placeholder="REQUIRED" />
               </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">EXAMINER PARENT (S/O, D/O, W/O)</label>
+                <input type="text" value={data.examinerParent} onChange={e => updateField('examinerParent', e.target.value)} className={getInputClass(data.examinerParent)} placeholder="EXAMINER'S PARENT/SPOUSE" />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">EXAMINER ADDRESS</label>
+                <input type="text" value={data.examinerAddress} onChange={e => updateField('examinerAddress', e.target.value)} className={getInputClass(data.examinerAddress)} placeholder="LABORATORY ADDRESS" />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1">LAB IDENTIFIER</label>
@@ -125,9 +341,15 @@ export const ReportsDraftingTable = () => {
                   </select>
                 </div>
               </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">PLACE OF VERIFICATION</label>
+                <input type="text" value={data.place} onChange={e => updateField('place', e.target.value)} className={getInputClass(data.place)} placeholder="PLACE OF SIGNING" />
+              </div>
             </div>
           </div>
         </div>
+        
         <div className="bg-slate-800 p-6 relative overflow-hidden flex-shrink-0">
            {isLocked && <div className="absolute inset-0 bg-[repeating-linear-gradient(-45deg,transparent,transparent_10px,rgba(0,0,0,0.2)_10px,rgba(0,0,0,0.2)_20px)] pointer-events-none z-10"></div>}
            <h4 className="text-slate-400 text-[10px] font-bold mb-3 tracking-widest flex items-center justify-between z-20 relative">
@@ -141,58 +363,197 @@ export const ReportsDraftingTable = () => {
                {isLocked ? 'DOCUMENT_IMMUTABLE' : 'HOLD_TO_SEAL'}
              </span>
            </button>
+           {isLocked && (
+             <button onClick={() => window.print()} className="w-full mt-4 h-12 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs tracking-widest shadow-[4px_4px_0px_rgba(0,0,0,0.5)] active:shadow-none active:translate-y-[4px] active:translate-x-[4px] transition-all flex justify-center items-center gap-2 z-20 relative">
+               PRINT CERTIFICATE (PDF)
+             </button>
+           )}
         </div>
       </div>
 
       {/* Right Panel: Live Document Rendering */}
-      <div className="flex-1 bg-[#0f172a] relative overflow-y-auto p-8 custom-scrollbar flex flex-col items-center">
-        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: `linear-gradient(to right, rgba(6, 182, 212, 0.1) 1px, transparent 1px), linear-gradient(to bottom, rgba(6, 182, 212, 0.1) 1px, transparent 1px)`, backgroundSize: '20px 20px' }}></div>
-        <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: `linear-gradient(to right, rgba(6, 182, 212, 0.2) 1px, transparent 1px), linear-gradient(to bottom, rgba(6, 182, 212, 0.2) 1px, transparent 1px)`, backgroundSize: '100px 100px' }}></div>
+      <div className="flex-1 bg-[#0f172a] relative overflow-y-auto p-8 custom-scrollbar flex flex-col items-center print:bg-white print:p-0 print:overflow-visible" id="certificate-print-area">
+        <div className="absolute inset-0 pointer-events-none print:hidden" style={{ backgroundImage: `linear-gradient(to right, rgba(6, 182, 212, 0.1) 1px, transparent 1px), linear-gradient(to bottom, rgba(6, 182, 212, 0.1) 1px, transparent 1px)`, backgroundSize: '20px 20px' }}></div>
+        <div className="absolute inset-0 pointer-events-none print:hidden" style={{ backgroundImage: `linear-gradient(to right, rgba(6, 182, 212, 0.2) 1px, transparent 1px), linear-gradient(to bottom, rgba(6, 182, 212, 0.2) 1px, transparent 1px)`, backgroundSize: '100px 100px' }}></div>
 
-        <div className="w-[800px] bg-[#e0f2fe] border-2 border-[#0284c7] p-12 shadow-[0_0_30px_rgba(2,132,199,0.15)] relative z-10 transition-all duration-500">
-          <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-[#0284c7]"></div>
-          <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-[#0284c7]"></div>
-          <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-[#0284c7]"></div>
-          <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-[#0284c7]"></div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-45 text-[#bae6fd] text-8xl font-black opacity-30 pointer-events-none select-none whitespace-nowrap">SECTION 63 B</div>
-
-          <div className="text-center border-b-2 border-[#0284c7] pb-6 mb-8 select-none">
-            <h1 className="text-2xl font-serif font-black text-[#0c4a6e] tracking-widest uppercase">Certificate Under Section 63</h1>
-            <h2 className="text-sm font-serif text-[#0369a1] uppercase tracking-widest mt-1">Bharatiya Sakshya Adhiniyam, 2023</h2>
+        {/* PAGE 1 - PART A */}
+        <div className="w-[800px] bg-white border border-slate-300 p-12 shadow-[0_0_30px_rgba(2,132,199,0.15)] relative z-10 transition-all duration-500 mb-8 print:shadow-none print:border-none print:mb-0 print:p-0 page-break-after">
+          
+          <div className="text-center pb-6 mb-8 select-none">
+            <h1 className="text-lg font-serif font-bold text-black uppercase">THE SCHEDULE</h1>
+            <h2 className="text-md font-serif text-black uppercase">[See section 63(4)(c)]</h2>
+            <h1 className="text-2xl font-serif font-black text-black tracking-widest uppercase mt-4">CERTIFICATE</h1>
+            <h2 className="text-xl font-serif font-bold text-black tracking-widest uppercase mt-2">PART A</h2>
+            <h3 className="text-md font-serif text-black uppercase">(To be filled by the Party)</h3>
           </div>
 
-          <div className="space-y-6 text-[#0f172a] text-sm leading-loose text-justify font-serif select-none">
-            <p>I, <span className="font-mono font-bold text-[#0284c7] bg-[#bae6fd] px-1">{data.custodianName || '[CUSTODIAN_NAME]'}</span>, functioning in the capacity of <span className="font-mono font-bold text-[#0284c7] bg-[#bae6fd] px-1">{data.designation || '[DESIGNATION]'}</span>, hereby certify that the electronic record detailed in the attached annexure was produced by a <span className="font-mono font-bold text-[#0284c7] bg-[#bae6fd] px-1 ml-1">{data.deviceType.replace(/_/g, ' ') || '[DEVICE_TYPE]'}</span>.</p>
-            <p>During the period over which the computer output was produced, the said device was regularly used to store or process information for the purposes of activities regularly carried on over that period. The device was <span className="font-mono font-bold text-[#0284c7] bg-[#bae6fd] px-1">{data.controlType || '[CONTROL]'}</span> by me in the ordinary course of operations.</p>
-            <p>The physical device containing the electronic record was secured under seal number <span className="font-mono font-bold text-[#0284c7] bg-[#bae6fd] px-1 ml-1">{data.sealNumber || '[SEAL_NUM]'}</span>, ensuring strict chain of custody protocols prior to forensic extraction.</p>
-            <p>Furthermore, I, <span className="font-mono font-bold text-[#0284c7] bg-[#bae6fd] px-1">{data.examinerName || '[EXAMINER_NAME]'}</span>, operating at <span className="font-mono font-bold text-[#0284c7] bg-[#bae6fd] px-1">{data.labId || '[LAB_ID]'}</span>, verify that the digital evidence was imaged and verified using the <span className="font-mono font-bold text-[#0284c7] bg-[#bae6fd] px-1 ml-1">{data.hashAlg || '[HASH_ALG]'}</span> algorithm. Throughout the material part of the period, the computer was operating properly, and there are no reasonable grounds for believing that the statement is inaccurate.</p>
-          </div>
-
-          <div className="mt-16 grid grid-cols-2 gap-8 select-none">
-            <div className="border-t border-[#0284c7] pt-2">
-              <div className="font-serif text-[#0369a1] text-xs uppercase mb-1">Part A Signatory</div>
-              <div className="font-mono font-bold text-[#0c4a6e]">{data.custodianName || 'PENDING'}</div>
-              <div className="font-mono text-xs text-[#0284c7]">{data.designation || 'PENDING'}</div>
+          <div className="space-y-6 text-black text-sm leading-loose text-justify font-serif select-none">
+            <p>I, <strong>{data.custodianName || '_____________________'}</strong>, Son/daughter/spouse of <strong>{data.custodianParent || '___________________'}</strong> residing/employed at <strong>{data.custodianAddress || '__________________________'}</strong> do hereby solemnly affirm and sincerely state and submit as follows:—</p>
+            
+            <p>I have produced electronic record/output of the digital record taken from the following device/digital record source (tick mark):—</p>
+            
+            <div className="flex flex-wrap gap-4 font-sans text-xs">
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.deviceType === 'COMPUTER_SYSTEM' ? '✓' : ''}</span> Computer / Storage Media</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.deviceType === 'CCTV_DVR_NVR' ? '✓' : ''}</span> DVR</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.deviceType === 'MOBILE_DEVICE' ? '✓' : ''}</span> Mobile</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> Flash Drive</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> CD/DVD</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> Server</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> Cloud</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> Other</div>
             </div>
-            <div className="border-t border-[#0284c7] pt-2">
-              <div className="font-serif text-[#0369a1] text-xs uppercase mb-1">Part B Signatory</div>
-              <div className="font-mono font-bold text-[#0c4a6e]">{data.examinerName || 'PENDING'}</div>
-              <div className="font-mono text-xs text-[#0284c7]">{data.labId || 'PENDING'}</div>
+
+            <p>
+              Other: <strong>{data.deviceType !== 'COMPUTER_SYSTEM' && data.deviceType !== 'CCTV_DVR_NVR' && data.deviceType !== 'MOBILE_DEVICE' ? data.deviceType : 'N/A'}</strong><br/>
+              Make & Model: <strong>{data.deviceMake || '_________________'}</strong> {data.deviceModel || ''} Color: <strong>{data.deviceColor || '___________'}</strong><br/>
+              Serial/Seal Number: <strong>{data.sealNumber || '_______________'}</strong> {data.deviceSerial ? `(S/N: ${data.deviceSerial})` : ''}<br/>
+              IMEI/UIN/UID/MAC/Cloud ID: <strong>{data.deviceImei || '_____________________'}</strong><br/>
+              and any other relevant information, if any, about the device/digital record: <strong>{data.deviceDescription || '_________________'}</strong>
+            </p>
+
+            <p>The digital device or the digital record source was under the lawful control for regularly creating, storing or processing information for the purposes of carrying out regular activities and during this period, the computer or the communication device was working properly and the relevant information was regularly fed into the computer during the ordinary course of business. If the computer/digital device at any point of time was not working properly or out of operation, then it has not affected the electronic/digital record or its accuracy. The digital device or the source of the digital record is:—</p>
+            
+            <div className="flex flex-wrap gap-4 font-sans text-xs">
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.controlType === 'OWNED' ? '✓' : ''}</span> Owned</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.controlType === 'MAINTAINED' ? '✓' : ''}</span> Maintained</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.controlType === 'MANAGED' ? '✓' : ''}</span> Managed</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.controlType === 'OPERATED' ? '✓' : ''}</span> Operated</div>
+              by me (select as applicable).
+            </div>
+
+            <p>I state that the HASH value/s of the electronic/digital record/s is <strong>{originalHash || '_________________'}</strong>, obtained through the following algorithm:—</p>
+
+            <div className="flex flex-col gap-2 font-sans text-xs">
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> SHA1:</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.hashAlg === 'SHA-256' ? '✓' : ''}</span> SHA256:</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.hashAlg === 'MD5' ? '✓' : ''}</span> MD5:</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.hashAlg === 'SHA-512' ? '✓' : ''}</span> Other: {data.hashAlg !== 'SHA-256' && data.hashAlg !== 'MD5' ? data.hashAlg : '__________________'}</div>
+            </div>
+
+            <p>(Hash report to be enclosed with the certificate)</p>
+
+            <div className="mt-12 flex justify-between">
+              <div>
+                <p>Date (DD/MM/YYYY): <strong>{isLocked ? new Date().toLocaleDateString('en-GB') : '_____'}</strong></p>
+                <p>Time (IST): <strong>{isLocked ? new Date().toLocaleTimeString('en-GB', {hour12: false, hour: "numeric", minute: "numeric"}) : '________'}</strong> hours</p>
+                <p>Place: <strong>{data.place || '________________'}</strong></p>
+              </div>
+              <div className="text-center flex flex-col items-center">
+                <div className="w-48 h-16 border-b border-black mb-2 flex items-end justify-center pb-2">
+                  {isLocked && <span className="font-script text-2xl text-blue-800 opacity-80">{data.custodianName}</span>}
+                </div>
+                <p>(Name and signature)</p>
+                <p><strong>{data.designation || ''}</strong></p>
+              </div>
             </div>
           </div>
-          {isLocked && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none animate-[stamp-drop_0.4s_ease-out_forwards]"><Stamp text="IMMUTABLE_RECORD" type="red" rotate="rotate-[15deg]" extraClasses="w-64 h-64 opacity-90 relative" /></div>}
+          {isLocked && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none animate-[stamp-drop_0.4s_ease-out_forwards] print:opacity-100 print:scale-100 print:rotate-[15deg]">
+              <Stamp text="PART_A_SEALED" type="red" rotate="rotate-[15deg]" extraClasses="w-64 h-64 opacity-90 relative" />
+            </div>
+          )}
         </div>
 
-        <div className="w-[800px] mt-8 bg-[#0f172a]/80 border border-[#0ea5e9] p-6 backdrop-blur-sm z-10 relative">
-           <h3 className="text-[#38bdf8] font-mono text-xs font-bold tracking-widest border-b border-[#0ea5e9]/50 pb-2 mb-4">ANNEXURE_1: HASH_REPORT</h3>
-           <table className="w-full text-left font-mono text-[10px]">
-             <thead><tr className="text-[#7dd3fc] border-b border-[#0ea5e9]/30"><th className="pb-2 font-normal">FILE_IDENTIFIER</th><th className="pb-2 font-normal">ALGORITHM</th><th className="pb-2 font-normal">HASH_VALUE</th><th className="pb-2 font-normal text-right">TIMESTAMP_IST</th></tr></thead>
-             <tbody className="text-[#bae6fd]">
-               <tr className="border-b border-[#0ea5e9]/10 hover:bg-[#0284c7]/20 transition-colors"><td className="py-2">EVID_IMAGE_001.E01</td><td className="py-2">{data.hashAlg}</td><td className="py-2 opacity-50">AWAITING_LOCK...</td><td className="py-2 text-right">--:--:--</td></tr>
-               <tr className="border-b border-[#0ea5e9]/10 hover:bg-[#0284c7]/20 transition-colors"><td className="py-2">LOG_DUMP_SYS.TXT</td><td className="py-2">{data.hashAlg}</td><td className="py-2 opacity-50">AWAITING_LOCK...</td><td className="py-2 text-right">--:--:--</td></tr>
+        {/* PAGE 2 - PART B */}
+        <div className="w-[800px] bg-white border border-slate-300 p-12 shadow-[0_0_30px_rgba(2,132,199,0.15)] relative z-10 transition-all duration-500 mb-8 print:shadow-none print:border-none print:mb-0 print:p-0 page-break-after">
+          <div className="text-center pb-6 mb-8 select-none">
+            <h2 className="text-xl font-serif font-bold text-black tracking-widest uppercase">PART B</h2>
+            <h3 className="text-md font-serif text-black uppercase">(To be filled by the Expert)</h3>
+          </div>
+
+          <div className="space-y-6 text-black text-sm leading-loose text-justify font-serif select-none">
+            <p>I, <strong>{data.examinerName || '____________________'}</strong>, Son/daughter/spouse of <strong>{data.examinerParent || '____________________'}</strong> residing/employed at <strong>{data.examinerAddress || '_________________________'}</strong> do hereby solemnly affirm and sincerely state and submit as follows:—</p>
+            
+            <p>The produced electronic record/output of the digital record are obtained from the following device/digital record source (tick mark):—</p>
+            
+            <div className="flex flex-wrap gap-4 font-sans text-xs">
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.deviceType === 'COMPUTER_SYSTEM' ? '✓' : ''}</span> Computer / Storage Media</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.deviceType === 'CCTV_DVR_NVR' ? '✓' : ''}</span> DVR</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.deviceType === 'MOBILE_DEVICE' ? '✓' : ''}</span> Mobile</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> Flash Drive</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> CD/DVD</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> Server</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> Cloud</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> Other</div>
+            </div>
+
+            <p>
+              Other: <strong>{data.deviceType !== 'COMPUTER_SYSTEM' && data.deviceType !== 'CCTV_DVR_NVR' && data.deviceType !== 'MOBILE_DEVICE' ? data.deviceType : 'N/A'}</strong><br/>
+              Make & Model: <strong>{data.deviceMake || '_________________'}</strong> {data.deviceModel || ''} Color: <strong>{data.deviceColor || '___________'}</strong><br/>
+              Serial/Seal Number: <strong>{data.sealNumber || '_______________'}</strong> {data.deviceSerial ? `(S/N: ${data.deviceSerial})` : ''}<br/>
+              IMEI/UIN/UID/MAC/Cloud ID: <strong>{data.deviceImei || '_____________________'}</strong><br/>
+              and any other relevant information, if any, about the device/digital record: <strong>{data.deviceDescription || '_________________'}</strong>
+            </p>
+
+            <p>I state that the HASH value/s of the electronic/digital record/s is <strong>{originalHash || '_____________________'}</strong>, obtained through the following algorithm:—</p>
+            
+            <div className="flex flex-col gap-2 font-sans text-xs">
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3"></span> SHA1:</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.hashAlg === 'SHA-256' ? '✓' : ''}</span> SHA256:</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.hashAlg === 'MD5' ? '✓' : ''}</span> MD5:</div>
+              <div><span className="inline-block w-4 h-4 border border-black mr-1 text-center leading-3">{data.hashAlg === 'SHA-512' ? '✓' : ''}</span> Other: {data.hashAlg !== 'SHA-256' && data.hashAlg !== 'MD5' ? data.hashAlg : '__________________'}</div>
+            </div>
+
+            <p>(Hash report to be enclosed with the certificate)</p>
+
+            <div className="mt-12 flex justify-between">
+              <div>
+                <p>Date (DD/MM/YYYY): <strong>{isLocked ? new Date().toLocaleDateString('en-GB') : '_____'}</strong></p>
+                <p>Time (IST): <strong>{isLocked ? new Date().toLocaleTimeString('en-GB', {hour12: false, hour: "numeric", minute: "numeric"}) : '________'}</strong> hours</p>
+                <p>Place: <strong>{data.place || '____________'}</strong></p>
+              </div>
+              <div className="text-center flex flex-col items-center">
+                <div className="w-48 h-16 border-b border-black mb-2 flex items-end justify-center pb-2">
+                  {isLocked && <span className="font-script text-2xl text-blue-800 opacity-80">{data.examinerName}</span>}
+                </div>
+                <p>(Name, designation and signature)</p>
+              </div>
+            </div>
+          </div>
+          {isLocked && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none animate-[stamp-drop_0.4s_ease-out_forwards] print:opacity-100 print:scale-100 print:rotate-[-15deg]">
+              <Stamp text="PART_B_SEALED" type="red" rotate="rotate-[-15deg]" extraClasses="w-64 h-64 opacity-90 relative" />
+            </div>
+          )}
+        </div>
+
+        {/* PAGE 3 - ANNEXURE */}
+        <div className="w-[800px] bg-white border border-slate-300 p-12 shadow-[0_0_30px_rgba(2,132,199,0.15)] relative z-10 transition-all duration-500 print:shadow-none print:border-none print:p-0">
+           <h3 className="text-black font-serif text-lg font-bold tracking-widest border-b border-black pb-2 mb-4 text-center">ANNEXURE 1: HASH REPORT</h3>
+           <table className="w-full text-left font-mono text-sm border-collapse border border-black">
+             <thead>
+               <tr className="border-b border-black bg-slate-100">
+                 <th className="p-2 border-r border-black font-bold">FILE_IDENTIFIER / DEVICE</th>
+                 <th className="p-2 border-r border-black font-bold">ALGORITHM</th>
+                 <th className="p-2 border-r border-black font-bold">HASH_VALUE</th>
+                 <th className="p-2 font-bold text-center">STATUS</th>
+               </tr>
+             </thead>
+             <tbody className="text-black">
+               {selectedEvidenceId ? (
+                 <tr className="border-b border-black">
+                   <td className="p-2 border-r border-black">{availableEvidence.find(e => e.id === selectedEvidenceId)?.title || 'EVIDENCE'}</td>
+                   <td className="p-2 border-r border-black">{data.hashAlg}</td>
+                   <td className="p-2 border-r border-black break-all">{originalHash || 'NO HASH'}</td>
+                   <td className="p-2 text-center">{isLocked ? 'SEALED' : 'PENDING'}</td>
+                 </tr>
+               ) : (
+                 <tr className="border-b border-black">
+                   <td colSpan="4" className="p-2 text-center italic text-slate-500">SELECT EVIDENCE FROM DROPDOWN</td>
+                 </tr>
+               )}
              </tbody>
            </table>
-           {isLocked && <div className="mt-6 p-3 bg-[#0284c7]/20 border border-[#38bdf8] flex items-center justify-between animate-pulse"><div className="text-[#7dd3fc] text-[10px] font-bold">DOC_SEAL_HASH</div><div className="font-mono text-[#f8fafc] text-xs tracking-widest">{finalHash}</div></div>}
+           
+           {isLocked && (
+             <div className="mt-8 border border-black p-4">
+               <div className="font-bold text-sm mb-1">DIGITAL DOCUMENT SEAL (SHA-256)</div>
+               <div className="text-xs text-slate-600 mb-2">This seal guarantees the integrity of this generated certificate.</div>
+               <div className="font-mono text-sm tracking-widest break-all bg-slate-100 p-2 border border-slate-300">
+                 {finalHash}
+               </div>
+             </div>
+           )}
         </div>
       </div>
     </div>

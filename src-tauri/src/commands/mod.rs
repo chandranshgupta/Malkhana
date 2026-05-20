@@ -5,3 +5,6 @@ pub mod certificate_commands;
 pub mod archive_commands;
 pub mod search_commands;
 pub mod settings_commands;
+pub mod user_commands;
+pub mod audit_commands;
+
