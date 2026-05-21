@@ -45,8 +45,17 @@ export const NewIngestionWorkflow = ({ setCurrentView }) => {
     deviceMake: '', deviceModel: '', deviceColor: '',
     witness1Name: '', witness1Contact: '',
     witness2Name: '', witness2Contact: '',
-    faradayIsolation: false, videoRecordingRef: ''
+    faradayIsolation: false, faradayDurationMinutes: '',
+    videoRecordingRef: ''
   });
+
+  // Canvas signature state
+  const witness1CanvasRef = useRef(null);
+  const witness2CanvasRef = useRef(null);
+  const [isDrawing1, setIsDrawing1] = useState(false);
+  const [isDrawing2, setIsDrawing2] = useState(false);
+  const [witness1Signed, setWitness1Signed] = useState(false);
+  const [witness2Signed, setWitness2Signed] = useState(false);
   
   const [simulationSourcePath, setSimulationSourcePath] = useState('');
   
@@ -164,6 +173,63 @@ export const NewIngestionWorkflow = ({ setCurrentView }) => {
 
   const updateForm = (field, val) => setFormData(p => ({ ...p, [field]: val }));
 
+  // --- Canvas signature drawing helpers ---
+  const getCanvasPos = (canvas, e) => {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const startDrawing = (canvasRef, setIsDrawing) => (e) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const pos = getCanvasPos(canvas, e);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+    setIsDrawing(true);
+  };
+
+  const draw = (canvasRef, isDrawing) => (e) => {
+    if (!isDrawing) return;
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const pos = getCanvasPos(canvas, e);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  };
+
+  const stopDrawing = (setIsDrawing, setSigned) => () => {
+    setIsDrawing(false);
+    setSigned(true);
+  };
+
+  const clearCanvas = (canvasRef, setSigned) => () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSigned(false);
+  };
+
+  const getCanvasBase64 = (canvasRef) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const hasContent = imageData.data.some((val, i) => i % 4 === 3 && val > 0);
+    if (!hasContent) return null;
+    return canvas.toDataURL('image/png');
+  };
+
   const startTerminalProcess = async () => {
     if (assetType !== 'FILES' && !formData.writeBlocker) return;
     
@@ -253,9 +319,12 @@ export const NewIngestionWorkflow = ({ setCurrentView }) => {
       const device_metadata = JSON.stringify({
         witness1_name: formData.witness1Name || '',
         witness1_contact: formData.witness1Contact || '',
+        witness1_signature: getCanvasBase64(witness1CanvasRef) || '',
         witness2_name: formData.witness2Name || '',
         witness2_contact: formData.witness2Contact || '',
+        witness2_signature: getCanvasBase64(witness2CanvasRef) || '',
         faraday_isolation: formData.faradayIsolation || false,
+        faraday_duration_minutes: formData.faradayDurationMinutes || '',
         video_recording_ref: formData.videoRecordingRef || '',
         extraction_type: formData.extractionType,
         os_version: formData.os,
@@ -499,6 +568,36 @@ export const NewIngestionWorkflow = ({ setCurrentView }) => {
                      <label className="block text-[9px] font-bold text-slate-500 mb-1">CONTACT / ADDRESS</label>
                      <input type="text" value={formData.witness1Contact} onChange={e=>updateForm('witness1Contact', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-xs uppercase bg-white outline-none focus:border-slate-800 placeholder:text-slate-300" placeholder="CONTACT OF WITNESS 1" />
                    </div>
+                   <div>
+                     <label className="block text-[9px] font-bold text-slate-500 mb-1">DIGITAL SIGNATURE PAD</label>
+                     <div className="border-2 border-dashed border-slate-400 bg-white relative">
+                       <canvas
+                         ref={witness1CanvasRef}
+                         width={280}
+                         height={100}
+                         className="w-full cursor-crosshair touch-none"
+                         onMouseDown={startDrawing(witness1CanvasRef, setIsDrawing1)}
+                         onMouseMove={draw(witness1CanvasRef, isDrawing1)}
+                         onMouseUp={stopDrawing(setIsDrawing1, setWitness1Signed)}
+                         onMouseLeave={stopDrawing(setIsDrawing1, setWitness1Signed)}
+                         onTouchStart={startDrawing(witness1CanvasRef, setIsDrawing1)}
+                         onTouchMove={draw(witness1CanvasRef, isDrawing1)}
+                         onTouchEnd={stopDrawing(setIsDrawing1, setWitness1Signed)}
+                       />
+                       {!witness1Signed && (
+                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                           <span className="text-slate-300 text-[10px] font-bold tracking-widest">DRAW SIGNATURE HERE</span>
+                         </div>
+                       )}
+                     </div>
+                     <button
+                       type="button"
+                       onClick={clearCanvas(witness1CanvasRef, setWitness1Signed)}
+                       className="mt-1 text-[9px] text-red-500 font-bold uppercase tracking-wider hover:text-red-700"
+                     >
+                       CLEAR
+                     </button>
+                   </div>
                  </div>
                </div>
                
@@ -513,6 +612,36 @@ export const NewIngestionWorkflow = ({ setCurrentView }) => {
                      <label className="block text-[9px] font-bold text-slate-500 mb-1">CONTACT / ADDRESS</label>
                      <input type="text" value={formData.witness2Contact} onChange={e=>updateForm('witness2Contact', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-xs uppercase bg-white outline-none focus:border-slate-800 placeholder:text-slate-300" placeholder="CONTACT OF WITNESS 2" />
                    </div>
+                   <div>
+                     <label className="block text-[9px] font-bold text-slate-500 mb-1">DIGITAL SIGNATURE PAD</label>
+                     <div className="border-2 border-dashed border-slate-400 bg-white relative">
+                       <canvas
+                         ref={witness2CanvasRef}
+                         width={280}
+                         height={100}
+                         className="w-full cursor-crosshair touch-none"
+                         onMouseDown={startDrawing(witness2CanvasRef, setIsDrawing2)}
+                         onMouseMove={draw(witness2CanvasRef, isDrawing2)}
+                         onMouseUp={stopDrawing(setIsDrawing2, setWitness2Signed)}
+                         onMouseLeave={stopDrawing(setIsDrawing2, setWitness2Signed)}
+                         onTouchStart={startDrawing(witness2CanvasRef, setIsDrawing2)}
+                         onTouchMove={draw(witness2CanvasRef, isDrawing2)}
+                         onTouchEnd={stopDrawing(setIsDrawing2, setWitness2Signed)}
+                       />
+                       {!witness2Signed && (
+                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                           <span className="text-slate-300 text-[10px] font-bold tracking-widest">DRAW SIGNATURE HERE</span>
+                         </div>
+                       )}
+                     </div>
+                     <button
+                       type="button"
+                       onClick={clearCanvas(witness2CanvasRef, setWitness2Signed)}
+                       className="mt-1 text-[9px] text-red-500 font-bold uppercase tracking-wider hover:text-red-700"
+                     >
+                       CLEAR
+                     </button>
+                   </div>
                  </div>
                </div>
              </div>
@@ -526,6 +655,12 @@ export const NewIngestionWorkflow = ({ setCurrentView }) => {
                    <input type="checkbox" className="hidden" checked={formData.faradayIsolation} onChange={() => updateForm('faradayIsolation', !formData.faradayIsolation)} />
                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">FARADAY BAG ISOLATION ENGAGED</span>
                  </label>
+                 {formData.faradayIsolation && (
+                   <div className="mt-3">
+                     <label className="block text-[9px] font-bold text-slate-500 mb-1">ISOLATION DURATION (MINUTES)</label>
+                     <input type="number" value={formData.faradayDurationMinutes} onChange={e=>updateForm('faradayDurationMinutes', e.target.value)} className="w-full border border-slate-400 p-2 font-mono text-xs uppercase bg-white outline-none focus:border-slate-800 placeholder:text-slate-300" placeholder="e.g. 120" />
+                   </div>
+                 )}
                </div>
                
                <div>

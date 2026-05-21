@@ -499,10 +499,31 @@ pub fn seed_if_empty(conn: &Connection) -> Result<(), rusqlite::Error> {
             ("admin", "ADMIN", "Administrator", "System Administrator"),
         ];
         for (uname, role, name, desg) in roles_and_names {
+            let pass_hash = crate::security::password::hash_password(uname).unwrap_or_else(|_| "invalid_hash".to_string());
             conn.execute(
                 "INSERT OR IGNORE INTO users (id, username, password_hash, role, full_name, designation, organization)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![uname, uname, "pbkdf2_sha256_mock_hash", role, name, desg, "Forensic Central"],
+                params![uname, uname, pass_hash, role, name, desg, "Forensic Central"],
+            )?;
+        }
+    }
+
+    // 1b. Seed officer profiles if table is empty
+    let officer_count: i64 = conn.query_row("SELECT COUNT(*) FROM officer_profiles", [], |r| r.get(0))?;
+    if officer_count == 0 {
+        log::info!("Seeding demo officer profiles...");
+        let officers = vec![
+            ("admin", "admin", "Administrator", "Administrator", "111111"),
+            ("op_092", "op_092", "OPERATOR_092", "Operator", "092092"),
+            ("io_rajesh", "io_rajesh", "SI Rajesh Sharma", "Sub-Inspector", "112233"),
+            ("dr_vance", "dr_vance", "DR. A. VANCE", "Examiner", "445566"),
+        ];
+        for (id, batch_no, name, rank, pin) in officers {
+            let pin_hash = crate::security::password::hash_password(pin).unwrap_or_else(|_| "invalid_hash".to_string());
+            conn.execute(
+                "INSERT OR IGNORE INTO officer_profiles (id, batch_no, full_name, rank, unit, jurisdiction, pin_hash)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![id, batch_no, name, rank, "Forensic Central", "Forensic Jurisdiction", pin_hash],
             )?;
         }
     }

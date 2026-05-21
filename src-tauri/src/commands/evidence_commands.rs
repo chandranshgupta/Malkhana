@@ -5,16 +5,18 @@ use crate::data::repository;
 
 #[tauri::command]
 pub fn get_evidence_details(id: String, db: State<DbState>) -> Result<Option<crate::data::models::Evidence>, String> {
-    let conn = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
-    repository::get_evidence_by_id(&conn, &id).map_err(|e| format!("Query failed: {}", e))
+    let guard = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+    repository::get_evidence_by_id(conn, &id).map_err(|e| format!("Query failed: {}", e))
 }
 
 /// Returns evidence items formatted for the EvidenceLog UI view.
 /// Reads from the database and transforms into the card format expected by React.
 #[tauri::command]
 pub fn get_evidence_log(db: State<DbState>) -> Result<Vec<EvidenceCard>, String> {
-    let conn = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
-    let evidence_list = repository::get_all_evidence(&conn)
+    let guard = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+    let evidence_list = repository::get_all_evidence(conn)
         .map_err(|e| format!("Query failed: {}", e))?;
 
     let cards: Vec<EvidenceCard> = evidence_list.into_iter().map(|ev| {
@@ -38,6 +40,7 @@ pub fn get_evidence_log(db: State<DbState>) -> Result<Vec<EvidenceCard>, String>
             "ACTIVE" => ("STATUS: IMMUTABLE", "blue", "-rotate-12"),
             "SEALED" => ("STATUS: SEALED", "green", "rotate-6"),
             "ARCHIVED" => ("STATUS: ARCHIVED", "gray", "-rotate-6"),
+            "DISPOSED" => ("STATUS: DISPOSED", "red", "rotate-12"),
             _ => ("STATUS: ALERT", "red", "rotate-12"),
         };
 
@@ -94,8 +97,31 @@ pub struct IngestEvidenceInput {
 pub fn ingest_evidence(
     input: IngestEvidenceInput,
     state: State<'_, DbState>,
+    active_user_state: State<'_, crate::ActiveUser>,
 ) -> Result<String, String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let guard = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+
+    // Enforce Role-Based Access Control (RBAC) - restricted to ADMIN, MALKHANA_INCHARGE, or IO
+    let username = {
+        let active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+        if let Some(ref user) = *active_guard {
+            if user.role != "ADMIN" && user.role != "MALKHANA_INCHARGE" && user.role != "IO" {
+                let _ = repository::append_audit_log(
+                    conn,
+                    "UNAUTHORIZED_ACCESS_ATTEMPT",
+                    "EVIDENCE",
+                    &input.case_id,
+                    &user.username,
+                    Some(&format!("Unauthorized attempt to ingest evidence type {} for case {}", input.asset_type, input.case_id)),
+                );
+                return Err("UNAUTHORIZED_ACCESS".to_string());
+            }
+            user.username.clone()
+        } else {
+            return Err("UNAUTHORIZED_ACCESS".to_string());
+        }
+    };
     
     let now = crate::core::time_authority::current_timestamp_iso8601();
     let evidence_id = format!("EVID-{}", uuid::Uuid::new_v4().simple().to_string()[..8].to_uppercase());
@@ -145,7 +171,7 @@ pub fn ingest_evidence(
         created_at: now.clone(),
     };
 
-    repository::insert_evidence(&conn, &new_evidence).map_err(|e| format!("Failed to insert evidence: {}", e))?;
+    repository::insert_evidence(conn, &new_evidence).map_err(|e| format!("Failed to insert evidence: {}", e))?;
     
     // Insert archive slot in archive_matrix
     if let Some(ref loc) = allocated_location {
@@ -162,7 +188,7 @@ pub fn ingest_evidence(
         id: custody_id,
         evidence_id: evidence_id.clone(),
         from_person: None,
-        to_person: "SYSTEM_USER".to_string(), // Seizing Officer / Intake Officer
+        to_person: username.clone(), // Seizing Officer / Intake Officer
         role: "SEIZING_OFFICER".to_string(),
         organization: Some("Delhi Police".to_string()),
         action: "SEIZED".to_string(),
@@ -172,15 +198,15 @@ pub fn ingest_evidence(
         signature: Some("DIGITAL_SIGNATURE_OK".to_string()),
         timestamp: now.clone(),
     };
-    repository::insert_custody_entry(&conn, &initial_custody).map_err(|e| format!("Failed to write custody log: {}", e))?;
+    repository::insert_custody_entry(conn, &initial_custody).map_err(|e| format!("Failed to write custody log: {}", e))?;
 
     // Log the event in the audit trail
     repository::append_audit_log(
-        &conn,
+        conn,
         "EVIDENCE_INGESTED",
         "EVIDENCE",
         &evidence_id,
-        "SYSTEM_USER",
+        &username,
         Some(&format!("Evidence {} (type {}) ingested for case {}", evidence_id, input.asset_type, input.case_id))
     ).map_err(|e| format!("Failed to write audit log: {}", e))?;
 
@@ -220,4 +246,3 @@ pub fn verify_forensic_integrity(
 ) -> crate::core::integrity_checker::HashComparisonResult {
     crate::core::integrity_checker::compare_hashes(&h1, &h2, h3.as_deref())
 }
-

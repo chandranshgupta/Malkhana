@@ -7,4 +7,6 @@ pub mod search_commands;
 pub mod settings_commands;
 pub mod user_commands;
 pub mod audit_commands;
-
+pub mod signing_commands;
+pub mod session_commands;
+pub mod disposition_commands;

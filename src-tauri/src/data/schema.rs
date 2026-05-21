@@ -179,4 +179,64 @@ INSERT OR IGNORE INTO settings (key, value, category, is_locked) VALUES
     ('append_only_audit', 'true', 'LEGAL', 1),
     ('bsa_section_63_format', 'v2023', 'LEGAL', 1);
 
+-- ============================================================
+-- OFFICER PROFILES & USER SESSIONS (PHASE 3)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS officer_profiles (
+    id TEXT PRIMARY KEY,
+    batch_no TEXT NOT NULL UNIQUE,
+    full_name TEXT NOT NULL,
+    rank TEXT NOT NULL,
+    unit TEXT,
+    jurisdiction TEXT,
+    pin_hash TEXT NOT NULL,
+    preferred_language TEXT DEFAULT 'en',
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    officer_id TEXT NOT NULL,
+    device_fingerprint TEXT NOT NULL,
+    camera_snapshot_hash TEXT,
+    audio_sample_hash TEXT,
+    merkle_root TEXT,
+    opened_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+    closed_at TEXT,
+    FOREIGN KEY (officer_id) REFERENCES officer_profiles(id)
+);
+
+CREATE TABLE IF NOT EXISTS session_events (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK(event_type IN ('SESSION_OPENED', 'VIEW', 'SEARCH', 'EXPORT', 'REAUTH', 'SESSION_CLOSED')),
+    entity_type TEXT,
+    entity_id TEXT,
+    details TEXT, -- JSON
+    prev_hash TEXT,
+    entry_hash TEXT NOT NULL,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+CREATE TABLE IF NOT EXISTS session_cosigners (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    cosigner_name TEXT NOT NULL,
+    cosigner_rank TEXT NOT NULL,
+    cosigner_batch_no TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
+    FOREIGN KEY (session_id) REFERENCES sessions(id)
+);
+
+CREATE TABLE IF NOT EXISTS system_health_log (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL CHECK(event_type IN ('STARTUP', 'SHUTDOWN', 'DOWNTIME_WARN')),
+    details TEXT,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes'))
+);
+
 "#;

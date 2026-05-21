@@ -7,8 +7,9 @@ use crate::core::certificate_engine;
 /// Returns lightweight evidence summaries for the certificate evidence selector dropdown
 #[tauri::command]
 pub fn get_evidence_for_certificate(db: State<DbState>) -> Result<Vec<EvidenceSummary>, String> {
-    let conn = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
-    repository::get_evidence_summaries(&conn).map_err(|e| format!("Query failed: {}", e))
+    let guard = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+    repository::get_evidence_summaries(conn).map_err(|e| format!("Query failed: {}", e))
 }
 
 /// Generates, seals, and persists a BSA Section 63 certificate.
@@ -22,10 +23,11 @@ pub fn generate_certificate(
     db: State<DbState>,
     input: CertificateInput,
 ) -> Result<Certificate, String> {
-    let conn = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
+    let guard = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
 
     // 1. Fetch the evidence record to get its actual hash
-    let evidence = repository::get_evidence_by_id(&conn, &input.evidence_id)
+    let evidence = repository::get_evidence_by_id(conn, &input.evidence_id)
         .map_err(|e| format!("Evidence query failed: {}", e))?
         .ok_or_else(|| format!("Evidence not found: {}", input.evidence_id))?;
 
@@ -43,7 +45,7 @@ pub fn generate_certificate(
     );
 
     // 4. Persist to encrypted database
-    repository::insert_certificate(&conn, &cert)
+    repository::insert_certificate(conn, &cert)
         .map_err(|e| format!("Certificate insert failed: {}", e))?;
 
     // 5. Append audit trail
@@ -55,7 +57,7 @@ pub fn generate_certificate(
     }).to_string();
 
     repository::append_audit_log(
-        &conn,
+        conn,
         "CERTIFICATE_SEALED",
         "CERTIFICATE",
         &cert_id,
@@ -74,7 +76,8 @@ pub fn get_certificate(
     db: State<DbState>,
     evidence_id: String,
 ) -> Result<Option<Certificate>, String> {
-    let conn = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
-    repository::get_certificate_by_evidence(&conn, &evidence_id)
+    let guard = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+    repository::get_certificate_by_evidence(conn, &evidence_id)
         .map_err(|e| format!("Query failed: {}", e))
 }

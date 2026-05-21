@@ -198,5 +198,183 @@ export const getHardwareInfo = async () => {
   }
 };
 
+export const isVaultInitialized = async () => {
+  try {
+    return await invoke('is_vault_initialized');
+  } catch (error) {
+    console.error('Failed to check vault init state:', error);
+    throw error;
+  }
+};
 
+export const isVaultLocked = async () => {
+  try {
+    return await invoke('is_vault_locked');
+  } catch (error) {
+    console.error('Failed to check if vault is locked:', error);
+    throw error;
+  }
+};
+
+export const unlockVault = async (password) => {
+  try {
+    return await invoke('unlock_vault', { password });
+  } catch (error) {
+    console.error('Failed to unlock vault:', error);
+    throw error;
+  }
+};
+
+export const lockVault = async () => {
+  try {
+    return await invoke('lock_vault');
+  } catch (error) {
+    console.error('Failed to lock vault:', error);
+    throw error;
+  }
+};
+
+export const generateUserSigningKey = async (username) => {
+  try {
+    return await invoke('generate_user_signing_key', { username });
+  } catch (error) {
+    console.error('Failed to generate signing key:', error);
+    throw error;
+  }
+};
+
+export const signCertificate = async (certificateId, privateKeyHex) => {
+  try {
+    return await invoke('sign_certificate', { certificateId, privateKeyHex });
+  } catch (error) {
+    console.error('Failed to sign certificate:', error);
+    throw error;
+  }
+};
+
+export const verifyCertificateSignature = async (certificateId) => {
+  try {
+    return await invoke('verify_certificate_signature', { certificateId });
+  } catch (error) {
+    console.error('Failed to verify certificate signature:', error);
+    throw error;
+  }
+};
+
+export const resetDatabase = async () => {
+  try {
+    return await invoke('reset_database');
+  } catch (error) {
+    console.error('Failed to reset database:', error);
+    throw error;
+  }
+};
+
+export const authenticateSession = async (batchNo, pinOrPassword, deviceFingerprint, cameraSnapshot = null, audioSample = null) => {
+  try {
+    return await invoke('authenticate_session', { batchNo, pinOrPassword, deviceFingerprint, cameraSnapshot, audioSample });
+  } catch (error) {
+    console.error('Failed to authenticate session:', error);
+    throw error;
+  }
+};
+
+export const closeSession = async (sessionId) => {
+  try {
+    return await invoke('close_session', { sessionId });
+  } catch (error) {
+    console.error('Failed to close session:', error);
+    throw error;
+  }
+};
+
+export const reauthSession = async (sessionId, pin, cameraSnapshot = null, audioSample = null) => {
+  try {
+    return await invoke('reauth_session', { sessionId, pin, cameraSnapshot, audioSample });
+  } catch (error) {
+    console.error('Failed to reauth session:', error);
+    throw error;
+  }
+};
+
+export const registerPin = async (batchNo, pin) => {
+  try {
+    return await invoke('register_pin', { batchNo, pin });
+  } catch (error) {
+    console.error('Failed to register pin:', error);
+    throw error;
+  }
+};
+
+export const saveEncryptedVaultKey = async (pin, masterPassword) => {
+  try {
+    return await invoke('save_encrypted_vault_key', { pin, masterPassword });
+  } catch (error) {
+    console.error('Failed to save encrypted vault key:', error);
+    throw error;
+  }
+};
+
+export const tryPinUnlock = async (pin) => {
+  try {
+    return await invoke('try_pin_unlock', { pin });
+  } catch (error) {
+    console.error('Failed to try pin unlock:', error);
+    throw error;
+  }
+};
+
+export const deletePinVault = async () => {
+  try {
+    return await invoke('delete_pin_vault');
+  } catch (error) {
+    console.error('Failed to delete pin vault:', error);
+    throw error;
+  }
+};
+
+export const isPinVaultEnabled = async () => {
+  try {
+    return await invoke('is_pin_vault_enabled');
+  } catch (error) {
+    console.error('Failed to check if pin vault is enabled:', error);
+    throw error;
+  }
+};
+
+export const cosignSession = async (sessionId, name, rank, batchNo, signature) => {
+  try {
+    return await invoke('cosign_session', { sessionId, name, rank, batchNo, signature });
+  } catch (error) {
+    console.error('Failed to cosign session:', error);
+    throw error;
+  }
+};
+
+export const logSystemHealthEvent = async (eventType, details) => {
+  try {
+    return await invoke('log_system_health_event', { eventType, details });
+  } catch (error) {
+    console.error('Failed to log system health event:', error);
+    throw error;
+  }
+};
+
+export const getSystemHealthLog = async () => {
+  try {
+    return await invoke('get_system_health_log');
+  } catch (error) {
+    console.error('Failed to get system health log:', error);
+    throw error;
+  }
+};
+
+export const disposeEvidence = async (evidenceId, dispositionType, magistrateOrderNo, disposedTo, signature, notes) => {
+  try {
+    return await invoke('dispose_evidence', { evidenceId, dispositionType, magistrateOrderNo, disposedTo, signature, notes });
+  } catch (error) {
+    console.error('Failed to dispose evidence:', error);
+    throw error;
+  }
+};
 

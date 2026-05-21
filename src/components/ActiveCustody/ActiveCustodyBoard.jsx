@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { WireframePerson } from '../shared/Wireframes';
 import { getEvidenceLog, getCustodyChain, transferCustody } from '../../api/invoke';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -97,6 +98,8 @@ export const PersonCard = ({ person, isHovered, onHover }) => (
 );
 
 export const ActiveCustodyBoard = ({ currentUser }) => {
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState('board'); // 'board' or 'register'
   const [evidenceItems, setEvidenceItems] = useState([]);
   const [selectedEvId, setSelectedEvId] = useState('');
   const [custodyChain, setCustodyChain] = useState([]);
@@ -384,35 +387,54 @@ export const ActiveCustodyBoard = ({ currentUser }) => {
   }, [recipient, customName, customOrg, hashMatchStatus, isAuthVerified, manualCheckbox]);
 
   return (
-    <div className="flex-1 w-full h-full flex overflow-hidden bg-[#f4f7f9]/50 backdrop-blur-[1px] relative">
+    <div className="flex-1 w-full h-full flex overflow-hidden bg-[#f4f7f9]/50 backdrop-blur-[1px] relative print:bg-white print:p-0">
       
       {/* Target Selector Control Bar & Main Layout */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <div className="border-b border-slate-400 bg-[#e2e8f0]/80 backdrop-blur-md p-6 flex justify-between items-center z-30 relative">
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative print:hidden">
+        <div className="border-b border-slate-400 bg-[#e2e8f0]/80 backdrop-blur-md p-6 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center z-30 relative">
           <div>
             <h2 className="text-2xl font-light tracking-tight flex items-baseline gap-4">
-              Custody Trace: <span className="font-bold">Investigation Board</span>
+              Custody Trace: <span className="font-bold">{activeTab === 'board' ? t('investigation_board') : t('movement_register')}</span>
             </h2>
             <p className="text-xs text-slate-600 mt-1 font-mono uppercase tracking-widest">Zero-Trust Auditing • Section 63 BSA Chain Proof</p>
           </div>
           
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-slate-500 font-mono uppercase">Select Target Asset:</span>
-            {evidenceItems.length > 0 ? (
-              <select 
-                value={selectedEvId}
-                onChange={(e) => setSelectedEvId(e.target.value)}
-                className="bg-white border border-slate-500 p-2 text-xs font-mono font-bold uppercase outline-none focus:border-slate-800 text-slate-700 shadow-[2px_2px_0px_rgba(100,116,139,0.2)]"
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Tab selection ribbon */}
+            <div className="flex font-mono text-xs border border-slate-400 bg-white shadow-[2px_2px_0px_rgba(100,116,139,0.1)]">
+              <button 
+                onClick={() => setActiveTab('board')}
+                className={`px-3 py-1.5 font-bold uppercase transition-colors ${activeTab === 'board' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
               >
-                {evidenceItems.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.title} ({item.id})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="text-xs font-bold text-slate-400">NO_ASSETS_LOADED</div>
-            )}
+                {t('investigation_board')}
+              </button>
+              <button 
+                onClick={() => setActiveTab('register')}
+                className={`px-3 py-1.5 font-bold border-l border-slate-400 uppercase transition-colors ${activeTab === 'register' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                {t('movement_register')}
+              </button>
+            </div>
+
+            {/* Target Selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 font-mono uppercase">Select Target Asset:</span>
+              {evidenceItems.length > 0 ? (
+                <select 
+                  value={selectedEvId}
+                  onChange={(e) => setSelectedEvId(e.target.value)}
+                  className="bg-white border border-slate-500 p-2 text-xs font-mono font-bold uppercase outline-none focus:border-slate-800 text-slate-700 shadow-[2px_2px_0px_rgba(100,116,139,0.2)]"
+                >
+                  {evidenceItems.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.title} ({item.id})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-xs font-bold text-slate-400">NO_ASSETS_LOADED</div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -426,7 +448,7 @@ export const ActiveCustodyBoard = ({ currentUser }) => {
             <div className="text-sm font-bold">NO_CUSTODY_HISTORY_FOUND</div>
             <div className="text-[10px] text-slate-400 mt-1 uppercase">Please verify the selected evidence is seeded correctly in SQLite.</div>
           </div>
-        ) : (
+        ) : activeTab === 'board' ? (
           <div className="flex-1 overflow-auto custom-scrollbar relative">
             <div className="min-h-[750px] relative p-8" style={{ width: `${Math.max(1200, 200 + personnelChain.length * 340)}px` }}>
               
@@ -478,6 +500,93 @@ export const ActiveCustodyBoard = ({ currentUser }) => {
             </div>
 
             {/* Floating Action Button */}
+            {!isTransferOpen && (
+              <button 
+                onClick={() => setIsTransferOpen(true)}
+                className="absolute bottom-8 right-8 z-40 bg-slate-800 hover:bg-slate-700 text-white font-mono text-xs font-black tracking-widest px-6 py-4 flex items-center gap-2 border border-slate-600 shadow-[4px_4px_0px_#475569] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all uppercase"
+              >
+                <Plus size={16} /> Transfer Custody (H2/H3 Check)
+              </button>
+            )}
+          </div>
+        ) : (
+          /* Movement Register Tab content */
+          <div className="flex-1 overflow-auto custom-scrollbar p-6 space-y-6 relative">
+            <div className="flex justify-between items-center bg-white border border-slate-400 p-6 shadow-[4px_4px_0px_rgba(100,116,139,0.1)]">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 uppercase tracking-wider">
+                  {selectedEvidence?.title || 'ASSET_LOG'} (FIR: {selectedEvidence?.case_fir || 'N/A'})
+                </h3>
+                <p className="text-xs text-slate-500 font-mono mt-1">
+                  ASSET_ID: {selectedEvId} • H1_SHA256: {selectedEvidence?.hash_sha256 || 'N/A'}
+                </p>
+              </div>
+              <button 
+                onClick={() => window.print()}
+                className="bg-slate-800 hover:bg-slate-700 text-white font-mono text-xs font-black tracking-widest px-4 py-2.5 border border-slate-600 shadow-[3px_3px_0px_#475569] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all uppercase flex items-center gap-2"
+              >
+                <FileText size={14} />
+                {t('print_register')}
+              </button>
+            </div>
+
+            <div className="border border-slate-400 bg-white shadow-[4px_4px_0px_rgba(100,116,139,0.1)] overflow-hidden">
+              <table className="w-full text-left font-mono text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-400 bg-slate-100 text-slate-600 uppercase font-black">
+                    <th className="p-3 border-r border-slate-400">Step</th>
+                    <th className="p-3 border-r border-slate-400">Date/Time (IST)</th>
+                    <th className="p-3 border-r border-slate-400">Transferor (Sender)</th>
+                    <th className="p-3 border-r border-slate-400">Transferee (Recipient)</th>
+                    <th className="p-3 border-r border-slate-400">Recipient Role & Org</th>
+                    <th className="p-3 border-r border-slate-400">Purpose / Action</th>
+                    <th className="p-3 border-r border-slate-400">Integrity Hash (Hn)</th>
+                    <th className="p-3">Seal Verification</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {personnelChain.map((person, index) => (
+                    <tr key={person.id} className="border-b border-slate-300 last:border-b-0 hover:bg-slate-50 transition-colors">
+                      <td className="p-3 border-r border-slate-300 font-bold">{index + 1}</td>
+                      <td className="p-3 border-r border-slate-300 font-sans text-slate-600">
+                        {new Date(person.timestamp).toLocaleString('en-GB', { hour12: false })}
+                      </td>
+                      <td className="p-3 border-r border-slate-300 font-bold text-slate-800">{person.from_person}</td>
+                      <td className="p-3 border-r border-slate-300 font-bold text-slate-800">{person.name}</td>
+                      <td className="p-3 border-r border-slate-300">
+                        <div className="font-bold text-slate-700">{person.role}</div>
+                        <div className="text-[10px] text-slate-500 font-sans">{person.org}</div>
+                      </td>
+                      <td className="p-3 border-r border-slate-300">
+                        <span className={`text-[9px] font-bold px-2 py-0.5 inline-block tracking-widest uppercase ${
+                          person.action === "SEIZED" ? "bg-emerald-100 text-emerald-800" :
+                          person.action === "SEALED" ? "bg-amber-100 text-amber-800" :
+                          person.action === "EXAMINED" ? "bg-purple-100 text-purple-800" :
+                          "bg-blue-100 text-blue-800"
+                        }`}>{person.action}</span>
+                        {person.notes && <div className="text-[10px] text-slate-500 italic mt-1 font-sans">"{person.notes}"</div>}
+                      </td>
+                      <td className="p-3 border-r border-slate-300 text-[10px] break-all max-w-[180px]">
+                        {person.hash_at_transfer || 'N/A'}
+                      </td>
+                      <td className="p-3">
+                        {person.hash_verified ? (
+                          <div className="flex items-center gap-1 text-emerald-600 font-bold text-[10px]">
+                            <CheckCircle2 size={12} /> HASH_MATCH
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 text-red-600 font-bold text-[10px] animate-pulse">
+                            <AlertTriangle size={12} /> MISMATCH / TAMPER
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Floating Action Button for Handoff inside Register Tab as well */}
             {!isTransferOpen && (
               <button 
                 onClick={() => setIsTransferOpen(true)}
@@ -738,6 +847,76 @@ export const ActiveCustodyBoard = ({ currentUser }) => {
         </div>
       )}
 
+      {/* Print-Only Movement Register Sheet */}
+      <div id="movement-register-print-area" className="hidden print:block bg-white p-12 text-black font-serif">
+        <div className="text-center pb-6 mb-8 border-b-2 border-black">
+          <h1 className="text-xl font-bold uppercase tracking-wide">MALKHANA EVIDENCE TRACKING SYSTEM</h1>
+          <h2 className="text-md font-bold uppercase tracking-widest mt-1">MOVEMENT REGISTER (CHAIN OF CUSTODY REPORT)</h2>
+          <p className="text-xs italic mt-1">Generated under Section 63 of Bharatiya Sakshya Adhiniyam (BSA), 2023</p>
+        </div>
+
+        <div className="mb-6 space-y-2 text-sm">
+          <div><strong>Case Reference (FIR):</strong> {selectedEvidence?.case_fir || 'N/A'}</div>
+          <div><strong>Evidence Reference (ID):</strong> {selectedEvId}</div>
+          <div><strong>Description of Item:</strong> {selectedEvidence?.title || 'N/A'} (Type: {selectedEvidence?.asset_type || 'N/A'})</div>
+          <div><strong>Initial Hash (H1 - SHA-256):</strong> <span className="font-mono text-xs">{selectedEvidence?.hash_sha256 || 'N/A'}</span></div>
+          <div><strong>Date/Time of Audit:</strong> {new Date().toLocaleString('en-GB')}</div>
+        </div>
+
+        <table className="w-full text-left text-xs border-collapse border border-black mb-8">
+          <thead>
+            <tr className="border-b border-black bg-slate-100 text-black font-bold uppercase">
+              <th className="p-2 border-r border-black">Step</th>
+              <th className="p-2 border-r border-black">Date/Time (IST)</th>
+              <th className="p-2 border-r border-black">Sender (Transferor)</th>
+              <th className="p-2 border-r border-black">Recipient (Transferee)</th>
+              <th className="p-2 border-r border-black">Designation & Agency</th>
+              <th className="p-2 border-r border-black">Action / Notes</th>
+              <th className="p-2 border-r border-black">Handoff Hash (Hn)</th>
+              <th className="p-2">Integrity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {personnelChain.map((person, index) => (
+              <tr key={person.id} className="border-b border-black">
+                <td className="p-2 border-r border-black font-bold">{index + 1}</td>
+                <td className="p-2 border-r border-black font-sans">{new Date(person.timestamp).toLocaleString('en-GB')}</td>
+                <td className="p-2 border-r border-black">{person.from_person}</td>
+                <td className="p-2 border-r border-black">{person.name}</td>
+                <td className="p-2 border-r border-black">
+                  {person.role}, {person.org}
+                </td>
+                <td className="p-2 border-r border-black">
+                  <strong>{person.action}</strong>
+                  {person.notes && <div className="text-[10px] italic">"{person.notes}"</div>}
+                </td>
+                <td className="p-2 border-r border-black font-mono text-[9px] break-all max-w-[120px]">{person.hash_at_transfer || 'N/A'}</td>
+                <td className="p-2">
+                  {person.hash_verified ? 'VERIFIED MATCH' : 'ALERT: MISMATCH'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <div className="mt-12 grid grid-cols-3 gap-6 text-center text-xs">
+          <div className="flex flex-col items-center">
+            <div className="w-40 border-b border-black h-16"></div>
+            <p className="mt-2 font-bold">Malkhana Custodian Signature</p>
+            <p className="text-[10px] text-slate-500">(Seal and Name)</p>
+          </div>
+          <div className="flex flex-col items-center">
+            <div className="w-40 border-b border-black h-16"></div>
+            <p className="mt-2 font-bold">Investigating Officer (IO)</p>
+            <p className="text-[10px] text-slate-500">(Seal and Name)</p>
+          </div>
+          <div className="flex flex-col items-center">
+            <div className="w-40 border-b border-black h-16"></div>
+            <p className="mt-2 font-bold">Authorized Officer Sign-Off</p>
+            <p className="text-[10px] text-slate-500">(Section 63 Certificate Issuer)</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

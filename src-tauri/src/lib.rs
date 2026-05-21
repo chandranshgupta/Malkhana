@@ -6,6 +6,8 @@ pub mod utils;
 
 use tauri::Manager;
 
+pub struct ActiveUser(pub std::sync::Mutex<Option<crate::data::models::User>>);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -16,43 +18,10 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .setup(|app| {
-            // Resolve DB Path: check for portable mode (DB next to executable) first
-            let mut db_path = None;
-            if let Ok(exe_path) = std::env::current_exe() {
-                if let Some(exe_dir) = exe_path.parent() {
-                    // Check directly next to executable
-                    let local_db = exe_dir.join("malkhana.db");
-                    if local_db.exists() {
-                        db_path = Some(local_db);
-                    } else {
-                        // Check inside a "data" directory next to executable
-                        let local_data_db = exe_dir.join("data").join("malkhana.db");
-                        if local_data_db.exists() {
-                            db_path = Some(local_data_db);
-                        }
-                    }
-                }
-            }
-
-            let resolved_db_path = db_path.unwrap_or_else(|| {
-                // Default to system AppData directory
-                let app_data_dir = app.path().app_data_dir().expect("failed to get app data dir");
-                if !app_data_dir.exists() {
-                    std::fs::create_dir_all(&app_data_dir).expect("failed to create app data dir");
-                }
-                app_data_dir.join("malkhana.db")
-            });
-            
-            // Initialize the SQLCipher database
-            let conn = data::database::init_db(&resolved_db_path).expect("failed to initialize database");
-            
-            // Seed demo data on first run (if tables are empty)
-            if let Err(e) = data::repository::seed_if_empty(&conn) {
-                log::warn!("Seed data insertion skipped: {}", e);
-            }
-            
-            // Register database state
-            app.manage(data::database::DbState(std::sync::Mutex::new(conn)));
+            // Register database state as None initially (requires Master Password input to decrypt)
+            app.manage(data::database::DbState(std::sync::Mutex::new(None)));
+            // Register active user state as None initially
+            app.manage(ActiveUser(std::sync::Mutex::new(None)));
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -80,6 +49,11 @@ pub fn run() {
             commands::archive_commands::get_archive_matrix,
             commands::user_commands::get_all_users,
             commands::user_commands::authenticate_user,
+            commands::user_commands::is_vault_initialized,
+            commands::user_commands::is_vault_locked,
+            commands::user_commands::unlock_vault,
+            commands::user_commands::lock_vault,
+            commands::user_commands::reset_database,
             commands::search_commands::global_search,
             commands::settings_commands::get_settings,
             commands::settings_commands::update_setting,
@@ -88,6 +62,21 @@ pub fn run() {
             commands::audit_commands::verify_audit_log_trail,
             commands::evidence_commands::detect_devices,
             commands::evidence_commands::verify_forensic_integrity,
+            commands::signing_commands::generate_user_signing_key,
+            commands::signing_commands::sign_certificate,
+            commands::signing_commands::verify_certificate_signature,
+            commands::session_commands::authenticate_session,
+            commands::session_commands::close_session,
+            commands::session_commands::reauth_session,
+            commands::session_commands::register_pin,
+            commands::session_commands::save_encrypted_vault_key,
+            commands::session_commands::try_pin_unlock,
+            commands::session_commands::delete_pin_vault,
+            commands::session_commands::is_pin_vault_enabled,
+            commands::session_commands::cosign_session,
+            commands::session_commands::log_system_health_event,
+            commands::session_commands::get_system_health_log,
+            commands::disposition_commands::dispose_evidence,
         ])
 
         .run(tauri::generate_context!())

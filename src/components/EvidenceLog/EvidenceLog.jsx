@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, CheckCircle2, AlertTriangle, ShieldCheck, UserCheck, ArrowRight, FileSignature, Landmark, Calendar } from 'lucide-react';
 import { EvidenceCard } from './EvidenceCard';
+import { DispositionDialog } from './DispositionDialog';
 import { WireframeSSD, WireframePhone, WireframeDVR } from '../shared/Wireframes';
 import { getEvidenceLog, getEvidenceDetails, getCustodyChain, transferCustody, getAllUsers, verifyForensicIntegrity } from '../../api/invoke';
 import { Stamp } from '../shared/Stamp';
@@ -15,6 +16,7 @@ export const EvidenceLog = ({ setCurrentView, currentUser, searchQuery = '', onD
   const [evidenceDetails, setEvidenceDetails] = useState(null);
   const [custodyChainList, setCustodyChainList] = useState([]);
   const [usersList, setUsersList] = useState([]);
+  const [showDispositionModal, setShowDispositionModal] = useState(false);
   
   // Form State
   const [transferTarget, setTransferTarget] = useState('');
@@ -162,6 +164,19 @@ export const EvidenceLog = ({ setCurrentView, currentUser, searchQuery = '', onD
     }
   };
 
+  const handleDispositionSuccess = async () => {
+    setShowDispositionModal(false);
+    try {
+      const details = await getEvidenceDetails(selectedEvidenceId);
+      setEvidenceDetails(details);
+      const chain = await getCustodyChain(selectedEvidenceId);
+      setCustodyChainList(chain);
+      await fetchEvidence();
+    } catch (err) {
+      console.error("Failed to refresh details after disposition:", err);
+    }
+  };
+
   const resolveImageComp = (typeStr) => {
     switch (typeStr) {
       case 'WireframeSSD': return WireframeSSD;
@@ -184,9 +199,8 @@ export const EvidenceLog = ({ setCurrentView, currentUser, searchQuery = '', onD
   return (
     <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
       <div className="mb-8">
-        <h2 className="text-3xl font-light tracking-tight mb-2 flex items-baseline gap-4">
-          Evidence Log: <span className="font-bold">Blueprint View</span>
-          <span className="text-[10px] text-slate-400 font-mono tracking-widest uppercase align-middle bg-slate-200 px-1">v.2.0.1</span>
+        <h2 className="text-3xl font-bold tracking-tight mb-2">
+          Evidence Log
         </h2>
         <div className="flex justify-between items-end border-b border-slate-300 pb-2">
           <p className="text-sm text-slate-600 italic font-serif">Current chain of custody items awaiting forensic imaging and verification.</p>
@@ -249,8 +263,8 @@ export const EvidenceLog = ({ setCurrentView, currentUser, searchQuery = '', onD
 
       {/* Forensic Detailed Evidence Modal */}
       {selectedEvidenceId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-slate-900/60 backdrop-blur-md">
-          <div className="bg-[#f4f7f9] border-2 border-slate-800 p-8 shadow-[16px_16px_0px_rgba(30,41,59,1)] w-full max-w-6xl h-[90vh] flex flex-col relative overflow-hidden animate-[fade-in_0.2s_ease-out]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-8 bg-slate-900/60 backdrop-blur-md">
+          <div className="bg-[#f4f7f9] border-2 border-slate-800 p-6 lg:p-8 shadow-[16px_16px_0px_rgba(30,41,59,1)] w-full max-w-6xl h-[90vh] overflow-y-auto lg:overflow-hidden flex flex-col relative animate-[fade-in_0.2s_ease-out]">
             
             {/* Corner Marks */}
             <div className="absolute top-4 left-4 w-4 h-4 border-t-2 border-l-2 border-slate-800"></div>
@@ -295,7 +309,7 @@ export const EvidenceLog = ({ setCurrentView, currentUser, searchQuery = '', onD
                 </div>
 
                 {/* Modal Contents Split Layout */}
-                <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 min-h-0 overflow-hidden">
+                <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:min-h-0 lg:overflow-hidden">
                   
                   {/* Left Column: Metadata & Technical Info (5 cols) */}
                   <div className="lg:col-span-5 flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar">
@@ -360,7 +374,7 @@ export const EvidenceLog = ({ setCurrentView, currentUser, searchQuery = '', onD
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-slate-300">
+                      <div className="pt-4 border-t border-slate-300 space-y-2">
                         <button 
                           onClick={() => {
                             setSelectedEvidenceId(null);
@@ -371,12 +385,21 @@ export const EvidenceLog = ({ setCurrentView, currentUser, searchQuery = '', onD
                           <FileSignature size={14} />
                           DRAFT_SEC_63_CERTIFICATE
                         </button>
+                        {['ADMIN', 'MALKHANA_INCHARGE'].includes(currentUser?.role) && evidenceDetails.status !== 'DISPOSED' && (
+                          <button 
+                            onClick={() => setShowDispositionModal(true)}
+                            className="w-full border-2 border-red-600 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white font-bold tracking-widest py-3 flex items-center justify-center gap-2 transition-all text-xs"
+                          >
+                            <Landmark size={14} />
+                            RECORD_EVIDENCE_DISPOSITION
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   {/* Right Column: Custody Chain Timeline & Transfers (7 cols) */}
-                  <div className="lg:col-span-7 flex flex-col min-h-0">
+                  <div className="lg:col-span-7 flex flex-col lg:min-h-0">
                     
                     {/* Upper Half: Chain Timeline */}
                     <div className="flex-1 flex flex-col min-h-0 border border-slate-300 bg-white p-4">
@@ -544,6 +567,14 @@ export const EvidenceLog = ({ setCurrentView, currentUser, searchQuery = '', onD
           </div>
         </div>
       )}
+
+      {/* Disposition Modal */}
+      <DispositionDialog 
+        isOpen={showDispositionModal}
+        onClose={() => setShowDispositionModal(false)}
+        evidenceId={selectedEvidenceId}
+        onDispositionSuccess={handleDispositionSuccess}
+      />
     </div>
   );
 };

@@ -12,7 +12,8 @@ pub fn create_case(
     jurisdiction: String,
     state: State<'_, DbState>,
 ) -> Result<String, String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let guard = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
     
     let now = crate::core::time_authority::current_timestamp_iso8601();
         
@@ -31,10 +32,10 @@ pub fn create_case(
         updated_at: now,
     };
 
-    repository::insert_case(&conn, &new_case).map_err(|e| format!("Failed to insert case: {}", e))?;
+    repository::insert_case(conn, &new_case).map_err(|e| format!("Failed to insert case: {}", e))?;
     
     repository::append_audit_log(
-        &conn,
+        conn,
         "CASE_CREATED",
         "CASE",
         &id,
@@ -47,7 +48,7 @@ pub fn create_case(
 
 #[tauri::command]
 pub fn get_all_cases(state: State<'_, DbState>) -> Result<Vec<Case>, String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    repository::get_all_cases(&conn).map_err(|e| format!("Query failed: {}", e))
+    let guard = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+    repository::get_all_cases(conn).map_err(|e| format!("Query failed: {}", e))
 }
-

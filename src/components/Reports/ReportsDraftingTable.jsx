@@ -19,6 +19,51 @@ export const IndCheckbox = ({ label, checked, onChange, disabled }) => (
 );
 
 export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearInitial }) => {
+  const [localLang, setLocalLang] = useState('en');
+  
+  const hindiLabels = {
+    part_a: "भाग क: अभिरक्षक",
+    evidence_source: "साक्ष्य स्रोत",
+    select_evidence: "-- साक्ष्य चुनें --",
+    custodian_name: "अधिकारी / अभिरक्षक का नाम",
+    required: "आवश्यक",
+    custodian_parent: "अभिरक्षक के पिता/माता/पति/पत्नी",
+    custodian_parent_placeholder: "अभिरक्षक के अभिभावक/पति/पत्नी",
+    custodian_address: "अभिरक्षक का पता",
+    custodian_address_placeholder: "आवासीय / कार्यालय का पता",
+    designation: "पद (डिजाइनेशन)",
+    seal_number: "सील संख्या (सील नंबर)",
+    device_specifics: "उपकरण का विवरण",
+    make: "निर्माता (मेक)",
+    model: "मॉडल",
+    color: "रंग",
+    serial: "क्रम संख्या (सीरियल नंबर)",
+    imei: "आईएमईआई / यूआईडी / मैक",
+    imei_placeholder: "आईएमईआई / मैक पता",
+    other_info: "कोई अन्य विवरण",
+    other_info_placeholder: "अतिरिक्त उपकरण विवरण",
+    device_category: "उपकरण की श्रेणी",
+    lock_part_a: "भाग क को लॉक करें और आगे बढ़ें",
+    unlock_part_a: "भाग क को अनलॉक करें",
+    part_b: "भाग ख: विशेषज्ञ",
+    examiner_name: "परीक्षक का नाम",
+    examiner_parent: "परीक्षक के पिता/माता/पति/पत्नी",
+    examiner_parent_placeholder: "परीक्षक के अभिभावक/पति/पत्नी",
+    examiner_address: "परीक्षक का पता",
+    examiner_address_placeholder: "प्रयोगशाला का पता",
+    lab_id: "प्रयोगशाला पहचानकर्ता",
+    hash_alg: "हैश एल्गोरिदम",
+    place: "सत्यापन का स्थान",
+    place_placeholder: "हस्ताक्षर करने का स्थान",
+    auth_plinth: "प्राधिकरण प्लिंथ",
+    secured: "सुरक्षित",
+    hold_to_seal: "सील करने के लिए दबाए रखें",
+    document_immutable: "दस्तावेज़ सुरक्षित है",
+    print_certificate: "प्रमाण पत्र प्रिंट करें (PDF)"
+  };
+
+  const getLabel = (key, defaultText) => localLang === 'hi' ? hindiLabels[key] || defaultText : defaultText;
+
   const [availableEvidence, setAvailableEvidence] = useState([]);
   const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
   const [originalHash, setOriginalHash] = useState('');
@@ -193,14 +238,32 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
   const getInputClass = (val) => `w-full bg-white/50 border outline-none px-3 py-2 text-sm font-bold text-slate-800 transition-all uppercase placeholder:text-slate-400 placeholder:font-normal ${!val && !isLocked ? crosshatchClass : 'border-slate-400 focus:border-slate-800 focus:bg-white'}`;
 
   return (
-    <div className="flex-1 flex overflow-hidden relative z-10">
+    <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden relative z-10">
       {/* Left Panel: Inputs */}
-      <div className={`w-[450px] border-r border-slate-400 flex flex-col relative z-20 ${isLocked ? 'grayscale pointer-events-none' : ''}`}>
+      <div className={`w-full lg:w-[450px] border-b lg:border-b-0 border-r-0 lg:border-r border-slate-400 flex flex-col relative z-20 flex-shrink-0 ${isLocked ? 'grayscale pointer-events-none' : ''}`}>
         <div className="p-6 border-b border-slate-400 bg-[#e2e8f0]/80 backdrop-blur-sm flex-shrink-0">
-          <h2 className="text-xl font-light tracking-tight flex items-center gap-3">
-            <FileSignature className="text-slate-700" size={24} />
-            <span className="font-bold text-slate-800">SEC_63_DRAFTING</span>
-          </h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-light tracking-tight flex items-center gap-3">
+              <FileSignature className="text-slate-700" size={24} />
+              <span className="font-bold text-slate-800">SEC_63_DRAFTING</span>
+            </h2>
+            
+            {/* English/Hindi Toggle Group */}
+            <div className="flex font-mono text-[10px] border border-slate-400 bg-white shadow-[2px_2px_0px_rgba(100,116,139,0.1)]">
+              <button 
+                onClick={() => setLocalLang('en')}
+                className={`px-2.5 py-1 font-bold ${localLang === 'en' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                EN
+              </button>
+              <button 
+                onClick={() => setLocalLang('hi')}
+                className={`px-2.5 py-1 font-bold border-l border-slate-400 ${localLang === 'hi' ? 'bg-slate-800 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+              >
+                हिंदी
+              </button>
+            </div>
+          </div>
           <p className="text-xs text-slate-600 mt-2 font-mono uppercase tracking-widest">Procedural Control Vault</p>
         </div>
         
@@ -209,15 +272,15 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
           <div className="border border-slate-400 bg-white shadow-[4px_4px_0px_rgba(100,116,139,0.1)] relative">
             <div className="absolute top-0 left-0 w-1 h-full bg-slate-800"></div>
             <div className="bg-slate-100 border-b border-slate-300 px-4 py-3 flex justify-between items-center">
-              <h3 className="font-bold text-sm text-slate-800 tracking-widest">PART A: CUSTODIAN</h3>
+              <h3 className="font-bold text-sm text-slate-800 tracking-widest">{getLabel('part_a', 'PART A: CUSTODIAN')}</h3>
               {isPartAComplete && <CheckCircle2 size={16} className="text-slate-600" />}
             </div>
             
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">EVIDENCE SOURCE</label>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('evidence_source', 'EVIDENCE SOURCE')}</label>
                 <select value={selectedEvidenceId} onChange={e => handleEvidenceSelect(e.target.value)} disabled={isLocked} className={getInputClass(selectedEvidenceId)}>
-                  <option value="">-- SELECT EVIDENCE --</option>
+                  <option value="">{getLabel('select_evidence', '-- SELECT EVIDENCE --')}</option>
                   {availableEvidence.map(ev => (
                     <option key={ev.id} value={ev.id}>{ev.title} ({ev.case_fir})</option>
                   ))}
@@ -225,69 +288,69 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
               </div>
               
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">OFFICER / CUSTODIAN NAME</label>
-                <input type="text" value={data.custodianName} onChange={e => updateField('custodianName', e.target.value)} className={getInputClass(data.custodianName)} placeholder="REQUIRED" />
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('custodian_name', 'OFFICER / CUSTODIAN NAME')}</label>
+                <input type="text" value={data.custodianName} onChange={e => updateField('custodianName', e.target.value)} className={getInputClass(data.custodianName)} placeholder={getLabel('required', 'REQUIRED')} />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">CUSTODIAN PARENT (S/O, D/O, W/O)</label>
-                <input type="text" value={data.custodianParent} onChange={e => updateField('custodianParent', e.target.value)} className={getInputClass(data.custodianParent)} placeholder="CUSTODIAN'S PARENT/SPOUSE" />
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('custodian_parent', 'CUSTODIAN PARENT (S/O, D/O, W/O)')}</label>
+                <input type="text" value={data.custodianParent} onChange={e => updateField('custodianParent', e.target.value)} className={getInputClass(data.custodianParent)} placeholder={getLabel('custodian_parent_placeholder', "CUSTODIAN'S PARENT/SPOUSE")} />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">CUSTODIAN ADDRESS</label>
-                <input type="text" value={data.custodianAddress} onChange={e => updateField('custodianAddress', e.target.value)} className={getInputClass(data.custodianAddress)} placeholder="RESIDENTIAL/OFFICE ADDRESS" />
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('custodian_address', 'CUSTODIAN ADDRESS')}</label>
+                <input type="text" value={data.custodianAddress} onChange={e => updateField('custodianAddress', e.target.value)} className={getInputClass(data.custodianAddress)} placeholder={getLabel('custodian_address_placeholder', 'RESIDENTIAL/OFFICE ADDRESS')} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">DESIGNATION</label>
-                  <input type="text" value={data.designation} onChange={e => updateField('designation', e.target.value)} className={getInputClass(data.designation)} placeholder="REQUIRED" />
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('designation', 'DESIGNATION')}</label>
+                  <input type="text" value={data.designation} onChange={e => updateField('designation', e.target.value)} className={getInputClass(data.designation)} placeholder={getLabel('required', 'REQUIRED')} />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">SEAL NUMBER</label>
-                  <input type="text" value={data.sealNumber} onChange={e => updateField('sealNumber', e.target.value)} className={getInputClass(data.sealNumber)} placeholder="REQUIRED" />
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('seal_number', 'SEAL NUMBER')}</label>
+                  <input type="text" value={data.sealNumber} onChange={e => updateField('sealNumber', e.target.value)} className={getInputClass(data.sealNumber)} placeholder={getLabel('required', 'REQUIRED')} />
                 </div>
               </div>
 
               <div className="pt-2 border-t border-slate-200 space-y-4">
-                <h4 className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">DEVICE SPECIFICS</h4>
+                <h4 className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">{getLabel('device_specifics', 'DEVICE SPECIFICS')}</h4>
                 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-500 mb-1">MAKE</label>
-                    <input type="text" value={data.deviceMake} onChange={e => updateField('deviceMake', e.target.value)} className={getInputClass(data.deviceMake)} placeholder="MAKE" />
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">{getLabel('make', 'MAKE')}</label>
+                    <input type="text" value={data.deviceMake} onChange={e => updateField('deviceMake', e.target.value)} className={getInputClass(data.deviceMake)} placeholder={getLabel('make', 'MAKE')} />
                   </div>
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-500 mb-1">MODEL</label>
-                    <input type="text" value={data.deviceModel} onChange={e => updateField('deviceModel', e.target.value)} className={getInputClass(data.deviceModel)} placeholder="MODEL" />
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">{getLabel('model', 'MODEL')}</label>
+                    <input type="text" value={data.deviceModel} onChange={e => updateField('deviceModel', e.target.value)} className={getInputClass(data.deviceModel)} placeholder={getLabel('model', 'MODEL')} />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-500 mb-1">COLOR</label>
-                    <input type="text" value={data.deviceColor} onChange={e => updateField('deviceColor', e.target.value)} className={getInputClass(data.deviceColor)} placeholder="COLOR" />
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">{getLabel('color', 'COLOR')}</label>
+                    <input type="text" value={data.deviceColor} onChange={e => updateField('deviceColor', e.target.value)} className={getInputClass(data.deviceColor)} placeholder={getLabel('color', 'COLOR')} />
                   </div>
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-500 mb-1">SERIAL NUMBER</label>
-                    <input type="text" value={data.deviceSerial} onChange={e => updateField('deviceSerial', e.target.value)} className={getInputClass(data.deviceSerial)} placeholder="SERIAL" />
+                    <label className="block text-[9px] font-bold text-slate-500 mb-1">{getLabel('serial', 'SERIAL NUMBER')}</label>
+                    <input type="text" value={data.deviceSerial} onChange={e => updateField('deviceSerial', e.target.value)} className={getInputClass(data.deviceSerial)} placeholder={getLabel('serial', 'SERIAL')} />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 mb-1">IMEI/UID/MAC</label>
-                  <input type="text" value={data.deviceImei} onChange={e => updateField('deviceImei', e.target.value)} className={getInputClass(data.deviceImei)} placeholder="IMEI / MAC ADDRESS" />
+                  <label className="block text-[9px] font-bold text-slate-500 mb-1">{getLabel('imei', 'IMEI/UID/MAC')}</label>
+                  <input type="text" value={data.deviceImei} onChange={e => updateField('deviceImei', e.target.value)} className={getInputClass(data.deviceImei)} placeholder={getLabel('imei_placeholder', 'IMEI / MAC ADDRESS')} />
                 </div>
 
                 <div>
-                  <label className="block text-[9px] font-bold text-slate-500 mb-1">ANY OTHER INFO / DESCRIPTION</label>
-                  <input type="text" value={data.deviceDescription} onChange={e => updateField('deviceDescription', e.target.value)} className={getInputClass(data.deviceDescription)} placeholder="ADDITIONAL DEVICE DESCRIPTION" />
+                  <label className="block text-[9px] font-bold text-slate-500 mb-1">{getLabel('other_info', 'ANY OTHER INFO / DESCRIPTION')}</label>
+                  <input type="text" value={data.deviceDescription} onChange={e => updateField('deviceDescription', e.target.value)} className={getInputClass(data.deviceDescription)} placeholder={getLabel('other_info_placeholder', 'ADDITIONAL DEVICE DESCRIPTION')} />
                 </div>
               </div>
 
               <div className="pt-2 border-t border-slate-200">
-                <label className="block text-[10px] font-bold text-slate-500 mb-3">DEVICE CATEGORY</label>
+                <label className="block text-[10px] font-bold text-slate-500 mb-3">{getLabel('device_category', 'DEVICE CATEGORY')}</label>
                 <div className="space-y-3">
                   <IndCheckbox label="COMPUTER_SYSTEM" checked={data.deviceType === 'COMPUTER_SYSTEM'} onChange={() => updateField('deviceType', 'COMPUTER_SYSTEM')} />
                   <IndCheckbox label="MOBILE_DEVICE" checked={data.deviceType === 'MOBILE_DEVICE'} onChange={() => updateField('deviceType', 'MOBILE_DEVICE')} />
@@ -296,9 +359,9 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
               </div>
               
               {!isPartAComplete ? (
-                <button onClick={() => !missingA && setIsPartAComplete(true)} disabled={missingA} className={`w-full mt-4 py-3 font-bold text-sm transition-all border ${missingA ? 'bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed' : 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700 shadow-[2px_2px_0px_rgba(100,116,139,0.5)]'}`}>LOCK PART A & PROCEED</button>
+                <button onClick={() => !missingA && setIsPartAComplete(true)} disabled={missingA} className={`w-full mt-4 py-3 font-bold text-sm transition-all border ${missingA ? 'bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed' : 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700 shadow-[2px_2px_0px_rgba(100,116,139,0.5)]'}`}>{getLabel('lock_part_a', 'LOCK PART A & PROCEED')}</button>
               ) : (
-                <button onClick={() => setIsPartAComplete(false)} className="w-full mt-4 py-2 border border-slate-400 text-slate-600 text-xs font-bold hover:bg-slate-50">UNLOCK PART A</button>
+                <button onClick={() => setIsPartAComplete(false)} className="w-full mt-4 py-2 border border-slate-400 text-slate-600 text-xs font-bold hover:bg-slate-50">{getLabel('unlock_part_a', 'UNLOCK PART A')}</button>
               )}
             </div>
           </div>
@@ -307,33 +370,33 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
           <div className={`border border-slate-400 bg-white relative transition-all ${isPartAComplete ? 'shadow-[4px_4px_0px_rgba(100,116,139,0.1)] opacity-100' : 'opacity-50 pointer-events-none'}`}>
              <div className="absolute top-0 left-0 w-1 h-full bg-slate-500"></div>
              <div className="bg-slate-100 border-b border-slate-300 px-4 py-3 flex justify-between items-center">
-              <h3 className="font-bold text-sm text-slate-800 tracking-widest">PART B: EXPERT</h3>
+              <h3 className="font-bold text-sm text-slate-800 tracking-widest">{getLabel('part_b', 'PART B: EXPERT')}</h3>
               {!isPartAComplete && <Lock size={14} className="text-slate-400" />}
             </div>
             
             <div className="p-4 space-y-4">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">EXAMINER NAME</label>
-                <input type="text" value={data.examinerName} onChange={e => updateField('examinerName', e.target.value)} className={getInputClass(data.examinerName)} placeholder="REQUIRED" />
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('examiner_name', 'EXAMINER NAME')}</label>
+                <input type="text" value={data.examinerName} onChange={e => updateField('examinerName', e.target.value)} className={getInputClass(data.examinerName)} placeholder={getLabel('required', 'REQUIRED')} />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">EXAMINER PARENT (S/O, D/O, W/O)</label>
-                <input type="text" value={data.examinerParent} onChange={e => updateField('examinerParent', e.target.value)} className={getInputClass(data.examinerParent)} placeholder="EXAMINER'S PARENT/SPOUSE" />
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('examiner_parent', 'EXAMINER PARENT (S/O, D/O, W/O)')}</label>
+                <input type="text" value={data.examinerParent} onChange={e => updateField('examinerParent', e.target.value)} className={getInputClass(data.examinerParent)} placeholder={getLabel('examiner_parent_placeholder', "EXAMINER'S PARENT/SPOUSE")} />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">EXAMINER ADDRESS</label>
-                <input type="text" value={data.examinerAddress} onChange={e => updateField('examinerAddress', e.target.value)} className={getInputClass(data.examinerAddress)} placeholder="LABORATORY ADDRESS" />
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('examiner_address', 'EXAMINER ADDRESS')}</label>
+                <input type="text" value={data.examinerAddress} onChange={e => updateField('examinerAddress', e.target.value)} className={getInputClass(data.examinerAddress)} placeholder={getLabel('examiner_address_placeholder', 'LABORATORY ADDRESS')} />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">LAB IDENTIFIER</label>
-                  <input type="text" value={data.labId} onChange={e => updateField('labId', e.target.value)} className={getInputClass(data.labId)} placeholder="REQUIRED" />
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('lab_id', 'LAB IDENTIFIER')}</label>
+                  <input type="text" value={data.labId} onChange={e => updateField('labId', e.target.value)} className={getInputClass(data.labId)} placeholder={getLabel('required', 'REQUIRED')} />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">HASH ALGORITHM</label>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('hash_alg', 'HASH ALGORITHM')}</label>
                   <select value={data.hashAlg} onChange={e => updateField('hashAlg', e.target.value)} className="w-full bg-white border border-slate-400 outline-none px-3 py-2 text-sm font-bold text-slate-800">
                     <option>SHA-256</option>
                     <option>MD5</option>
@@ -343,8 +406,8 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">PLACE OF VERIFICATION</label>
-                <input type="text" value={data.place} onChange={e => updateField('place', e.target.value)} className={getInputClass(data.place)} placeholder="PLACE OF SIGNING" />
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">{getLabel('place', 'PLACE OF VERIFICATION')}</label>
+                <input type="text" value={data.place} onChange={e => updateField('place', e.target.value)} className={getInputClass(data.place)} placeholder={getLabel('place_placeholder', 'PLACE OF SIGNING')} />
               </div>
             </div>
           </div>
@@ -353,19 +416,19 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
         <div className="bg-slate-800 p-6 relative overflow-hidden flex-shrink-0">
            {isLocked && <div className="absolute inset-0 bg-[repeating-linear-gradient(-45deg,transparent,transparent_10px,rgba(0,0,0,0.2)_10px,rgba(0,0,0,0.2)_20px)] pointer-events-none z-10"></div>}
            <h4 className="text-slate-400 text-[10px] font-bold mb-3 tracking-widest flex items-center justify-between z-20 relative">
-             <span>AUTHORIZATION PLINTH</span>
-             {isLocked && <span className="text-green-400">SECURED</span>}
+             <span>{getLabel('auth_plinth', 'AUTHORIZATION PLINTH')}</span>
+             {isLocked && <span className="text-green-400">{getLabel('secured', 'SECURED')}</span>}
            </h4>
            <button onPointerDown={() => isPartAComplete && !missingB && !isLocked && setIsSigning(true)} onPointerUp={() => setIsSigning(false)} onPointerLeave={() => setIsSigning(false)} className={`w-full h-16 relative flex items-center justify-center font-black tracking-widest transition-all z-20 ${!isPartAComplete || missingB ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : isLocked ? 'bg-[#1e293b] text-slate-500 border-2 border-slate-600' : 'bg-white text-slate-900 cursor-pointer hover:bg-slate-100 shadow-[4px_4px_0px_rgba(0,0,0,0.5)] active:shadow-none active:translate-y-[4px] active:translate-x-[4px]'}`}>
              {!isLocked && <div className="absolute top-0 left-0 h-full bg-slate-300 transition-all ease-linear" style={{ width: `${signProgress}%`, transitionDuration: isSigning ? '100ms' : '300ms' }} />}
              <span className="relative z-10 flex items-center gap-2">
                {isLocked ? <Lock size={18} /> : <Fingerprint size={18} />}
-               {isLocked ? 'DOCUMENT_IMMUTABLE' : 'HOLD_TO_SEAL'}
+               {isLocked ? getLabel('document_immutable', 'DOCUMENT_IMMUTABLE') : getLabel('hold_to_seal', 'HOLD TO SEAL')}
              </span>
            </button>
            {isLocked && (
              <button onClick={() => window.print()} className="w-full mt-4 h-12 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs tracking-widest shadow-[4px_4px_0px_rgba(0,0,0,0.5)] active:shadow-none active:translate-y-[4px] active:translate-x-[4px] transition-all flex justify-center items-center gap-2 z-20 relative">
-               PRINT CERTIFICATE (PDF)
+               {getLabel('print_certificate', 'PRINT CERTIFICATE (PDF)')}
              </button>
            )}
         </div>

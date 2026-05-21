@@ -4,9 +4,105 @@ use crate::data::models::User;
 use crate::data::repository;
 
 #[tauri::command]
+pub fn is_vault_initialized(app: tauri::AppHandle) -> Result<bool, String> {
+    let db_path = crate::data::database::resolve_db_path(&app);
+    Ok(db_path.exists())
+}
+
+#[tauri::command]
+pub fn is_vault_locked(state: State<'_, DbState>) -> Result<bool, String> {
+    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    Ok(guard.is_none())
+}
+
+#[tauri::command]
+pub fn unlock_vault(
+    password: String,
+    app: tauri::AppHandle,
+    state: State<'_, DbState>,
+) -> Result<bool, String> {
+    let db_path = crate::data::database::resolve_db_path(&app);
+    let derived_user_key = format!(
+        "x'{}'",
+        hex::encode(crate::security::key_derivation::derive_key_from_password(&password))
+    );
+    
+    // 1. Attempt to open DB with the derived user key
+    let conn = if let Ok(c) = crate::data::database::open_db_with_key(&db_path, &derived_user_key) {
+        c
+    } else {
+        // 2. Fallback: Try raw user password (legacy format)
+        if let Ok(old_conn) = crate::data::database::open_db_with_key(&db_path, &password) {
+            match old_conn.pragma_update(None, "rekey", &derived_user_key) {
+                Ok(_) => {
+                    log::info!("Successfully migrated SQLCipher database from raw master password to derived key");
+                    drop(old_conn);
+                    crate::data::database::open_db_with_key(&db_path, &derived_user_key)
+                        .map_err(|err| format!("Failed to open DB after migrating raw password: {}", err))?
+                }
+                Err(err) => return Err(format!("Failed to rekey database from raw password: {}", err)),
+            }
+        }
+        // 3. Fallback: Try derived dev key
+        else {
+            let dev_pwd = "malkhana-vault-2024-secure-key-v1";
+            let derived_dev_key = format!(
+                "x'{}'",
+                hex::encode(crate::security::key_derivation::derive_key_from_password(dev_pwd))
+            );
+            if let Ok(old_conn) = crate::data::database::open_db_with_key(&db_path, &derived_dev_key) {
+                match old_conn.pragma_update(None, "rekey", &derived_user_key) {
+                    Ok(_) => {
+                        log::info!("Successfully migrated SQLCipher database from derived dev key to derived user key");
+                        drop(old_conn);
+                        crate::data::database::open_db_with_key(&db_path, &derived_user_key)
+                            .map_err(|err| format!("Failed to open DB after migrating derived dev key: {}", err))?
+                    }
+                    Err(err) => return Err(format!("Failed to rekey database from derived dev key: {}", err)),
+                }
+            }
+            // 4. Fallback: Try legacy raw dev key
+            else if let Ok(old_conn) = crate::data::database::open_db_with_key(&db_path, dev_pwd) {
+                match old_conn.pragma_update(None, "rekey", &derived_user_key) {
+                    Ok(_) => {
+                        log::info!("Successfully migrated SQLCipher database from legacy raw dev key to derived user key");
+                        drop(old_conn);
+                        crate::data::database::open_db_with_key(&db_path, &derived_user_key)
+                            .map_err(|err| format!("Failed to open DB after migrating raw dev key: {}", err))?
+                    }
+                    Err(err) => return Err(format!("Failed to rekey database from legacy raw dev key: {}", err)),
+                }
+            } else {
+                return Err("DECRYPTION_FAILED: Invalid decryption key.".to_string());
+            }
+        }
+    };
+        
+    let mut guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    *guard = Some(conn);
+    
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn lock_vault(
+    state: State<'_, DbState>,
+    active_user_state: State<'_, crate::ActiveUser>,
+) -> Result<(), String> {
+    let mut guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    *guard = None;
+
+    let mut active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+    *active_guard = None;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub fn get_all_users(state: State<'_, DbState>) -> Result<Vec<User>, String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    repository::get_all_users(&conn).map_err(|e| format!("Query failed: {}", e))
+    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+    repository::get_all_users(conn).map_err(|e| format!("Query failed: {}", e))
 }
 
 #[tauri::command]
@@ -14,8 +110,10 @@ pub fn authenticate_user(
     username: String,
     password: String,
     state: State<'_, DbState>,
+    active_user_state: State<'_, crate::ActiveUser>,
 ) -> Result<User, String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
 
     // 1. Fetch user status and login/lockout details
     let mut stmt = conn.prepare(
@@ -27,14 +125,16 @@ pub fn authenticate_user(
         user: User,
         failed_attempts: i32,
         locked_until: Option<String>,
+        stored_hash: String,
     }
 
     let db_user = stmt.query_row(rusqlite::params![username], |row| {
+        let stored_hash: String = row.get(2)?;
         Ok(DbUser {
             user: User {
                 id: row.get(0)?,
                 username: row.get(1)?,
-                password_hash: "".to_string(), // don't expose it
+                password_hash: "".to_string(), // don't expose to frontend
                 role: row.get(3)?,
                 full_name: row.get(4)?,
                 designation: row.get(5)?,
@@ -46,6 +146,7 @@ pub fn authenticate_user(
             },
             failed_attempts: row.get(11)?,
             locked_until: row.get(12)?,
+            stored_hash,
         })
     }).map_err(|_| "User not found".to_string())?;
 
@@ -62,8 +163,23 @@ pub fn authenticate_user(
         }
     }
 
-    // 3. Verify password (username = password for demo users)
-    let is_valid = password == db_user.user.username;
+    // 3. Verify password using Argon2id with backward compatibility for mock hashes
+    let is_valid = if db_user.stored_hash == "pbkdf2_sha256_mock_hash" {
+        // Upgrade mock hash to Argon2id if password equals username
+        if password == username {
+            if let Ok(new_hash) = crate::security::password::hash_password(&password) {
+                let _ = conn.execute(
+                    "UPDATE users SET password_hash = ?1 WHERE username = ?2",
+                    rusqlite::params![new_hash, username],
+                );
+            }
+            true
+        } else {
+            false
+        }
+    } else {
+        crate::security::password::verify_password(&password, &db_user.stored_hash)
+    };
 
     if is_valid {
         // Reset failed attempts
@@ -74,13 +190,17 @@ pub fn authenticate_user(
 
         // Append to audit log
         repository::append_audit_log(
-            &conn,
+            conn,
             "LOGIN_SUCCESS",
             "USER",
             &db_user.user.id,
             &db_user.user.username,
             Some("User logged in successfully"),
         ).unwrap_or(());
+
+        // Update ActiveUser state
+        let mut active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+        *active_guard = Some(db_user.user.clone());
 
         Ok(db_user.user)
     } else {
@@ -97,7 +217,7 @@ pub fn authenticate_user(
 
             // Append to audit log
             repository::append_audit_log(
-                &conn,
+                conn,
                 "USER_LOCKED_OUT",
                 "USER",
                 &db_user.user.id,
@@ -115,4 +235,81 @@ pub fn authenticate_user(
             Err(format!("INVALID_CREDENTIALS|{}", 5 - new_attempts))
         }
     }
+}
+
+#[tauri::command]
+pub fn reset_database(
+    app: tauri::AppHandle,
+    state: State<'_, DbState>,
+    active_user_state: State<'_, crate::ActiveUser>,
+) -> Result<(), String> {
+    // Enforce Role-Based Access Control (RBAC) - restricted to ADMIN
+    {
+        let active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+        if let Some(ref user) = *active_guard {
+            if user.role != "ADMIN" {
+                // Log unauthorized access attempt if DB is decrypted
+                let db_guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+                if let Some(conn) = db_guard.as_ref() {
+                    let _ = repository::append_audit_log(
+                        conn,
+                        "UNAUTHORIZED_ACCESS_ATTEMPT",
+                        "DATABASE",
+                        "SYSTEM",
+                        &user.username,
+                        Some("Unauthorized attempt to reset database"),
+                    );
+                }
+                return Err("UNAUTHORIZED_ACCESS".to_string());
+            }
+        } else {
+            return Err("UNAUTHORIZED_ACCESS".to_string());
+        }
+    }
+
+    // 1. Lock the database connection first by setting DbState to None
+    {
+        let mut guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+        *guard = None;
+    }
+    
+    // 2. Resolve database path
+    let db_path = crate::data::database::resolve_db_path(&app);
+    
+    // 3. Delete database file and associated WAL/SHM files
+    if db_path.exists() {
+        std::fs::remove_file(&db_path)
+            .map_err(|e| format!("Failed to delete database file: {}", e))?;
+    }
+    let wal_path = db_path.with_extension("db-wal");
+    if wal_path.exists() {
+        let _ = std::fs::remove_file(&wal_path);
+    }
+    let shm_path = db_path.with_extension("db-shm");
+    if shm_path.exists() {
+        let _ = std::fs::remove_file(&shm_path);
+    }
+
+    // 4. Clear any files in the evidence vault
+    let vault_dir = crate::core::vault_manager::prepare_vault_dir(&app).ok();
+    if let Some(dir) = vault_dir {
+        if dir.exists() {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    // 5. Re-create and decrypt/initialize a new database using the default master key
+    let default_key = "malkhana-vault-2024-secure-key-v1";
+    let derived_dev_key = format!(
+        "x'{}'",
+        hex::encode(crate::security::key_derivation::derive_key_from_password(default_key))
+    );
+    let conn = crate::data::database::open_db_with_key(&db_path, &derived_dev_key)
+        .map_err(|e| format!("Failed to initialize original database: {}", e))?;
+        
+    // 6. Close the connection handle so it is closed in memory (locked)
+    drop(conn);
+
+    log::info!("Database successfully reset to original test environment.");
+    Ok(())
 }

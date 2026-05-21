@@ -1,35 +1,38 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, X, CheckCircle2, Download } from 'lucide-react';
+import { Search, X, CheckCircle2, Download, Landmark } from 'lucide-react';
 import { WireframeSSD, WireframePhone, WireframeDVR } from '../shared/Wireframes';
 import { Stamp } from '../shared/Stamp';
 import { getArchiveMatrix, searchArchive, getEvidenceLog } from '../../api/invoke';
+import { DispositionDialog } from '../EvidenceLog/DispositionDialog';
 
-export const SealedArchiveMatrix = ({ onPrintCC1 }) => {
+export const SealedArchiveMatrix = ({ onPrintCC1, currentUser }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [slots, setSlots] = useState([]);
   const [evidenceMap, setEvidenceMap] = useState({});
   const [selectedDrawer, setSelectedDrawer] = useState(null);
   const [highlightedLocations, setHighlightedLocations] = useState([]);
+  const [showDispositionModal, setShowDispositionModal] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      const [matrix, evidenceLog] = await Promise.all([
+        getArchiveMatrix(),
+        getEvidenceLog()
+      ]);
+      
+      // Build evidence map
+      const evMap = {};
+      evidenceLog.forEach(ev => {
+        evMap[ev.id] = ev;
+      });
+      setEvidenceMap(evMap);
+      setSlots(matrix);
+    } catch (err) {
+      console.error("Failed to load archive details:", err);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [matrix, evidenceLog] = await Promise.all([
-          getArchiveMatrix(),
-          getEvidenceLog()
-        ]);
-        
-        // Build evidence map
-        const evMap = {};
-        evidenceLog.forEach(ev => {
-          evMap[ev.id] = ev;
-        });
-        setEvidenceMap(evMap);
-        setSlots(matrix);
-      } catch (err) {
-        console.error("Failed to load archive details:", err);
-      }
-    };
     fetchData();
   }, []);
 
@@ -77,6 +80,12 @@ export const SealedArchiveMatrix = ({ onPrintCC1 }) => {
     });
   }, [slots, evidenceMap]);
 
+  const handleDispositionSuccess = async () => {
+    setShowDispositionModal(false);
+    setSelectedDrawer(null);
+    await fetchData();
+  };
+
   return (
     <div className="flex-1 flex flex-col relative z-10 overflow-hidden bg-[#f4f7f9]/50 backdrop-blur-[1px]">
       
@@ -108,7 +117,7 @@ export const SealedArchiveMatrix = ({ onPrintCC1 }) => {
         <div className="max-w-[1400px] mx-auto">
           
           {/* Axis Labels & Grid */}
-          <div className="relative">
+          <div className="relative min-w-[1024px]">
              {/* Column Labels */}
              <div className="grid grid-cols-[repeat(15,minmax(0,1fr))] gap-2 mb-2 ml-8">
                {Array.from({ length: 15 }).map((_, i) => (
@@ -166,8 +175,8 @@ export const SealedArchiveMatrix = ({ onPrintCC1 }) => {
 
       {/* Blueprint Drawer Modal */}
       {selectedDrawer && selectedDrawer.evidence && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-8 bg-slate-900/40 backdrop-blur-md">
-          <div className="bg-[#f4f7f9] border-2 border-slate-800 p-10 shadow-[16px_16px_0px_rgba(30,41,59,1)] w-full max-w-4xl relative overflow-hidden animate-[fade-in_0.2s_ease-out]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:p-8 bg-slate-900/40 backdrop-blur-md">
+          <div className="bg-[#f4f7f9] border-2 border-slate-800 p-6 lg:p-10 shadow-[16px_16px_0px_rgba(30,41,59,1)] w-full max-w-4xl max-h-[90vh] overflow-y-auto relative animate-[fade-in_0.2s_ease-out]">
             
             {/* Modal Blueprint Grid Background */}
             <div className="absolute inset-0 pointer-events-none opacity-50" style={{
@@ -189,7 +198,7 @@ export const SealedArchiveMatrix = ({ onPrintCC1 }) => {
               <X size={24} strokeWidth={2.5} />
             </button>
 
-            <div className="relative z-10 grid grid-cols-2 gap-12">
+            <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-12">
               
               {/* Left Column: Visuals & Status */}
               <div className="flex flex-col">
@@ -258,19 +267,40 @@ export const SealedArchiveMatrix = ({ onPrintCC1 }) => {
                   </div>
                 </div>
 
-                {/* Brutalist Export Button */}
-                <button 
-                  onClick={() => onPrintCC1 && onPrintCC1(selectedDrawer.evidence.id)}
-                  className="w-full mt-8 border-2 border-slate-800 bg-slate-800 text-white font-bold tracking-widest py-4 flex items-center justify-center gap-3 shadow-[6px_6px_0px_rgba(100,116,139,0.5)] transition-all active:shadow-none active:translate-x-[6px] active:translate-y-[6px] hover:bg-slate-700"
-                >
-                  <Download size={18} />
-                  EXPORT_CHAIN_OF_CUSTODY
-                </button>
+                {/* Actions */}
+                <div className="mt-8 space-y-4">
+                  <button 
+                    onClick={() => onPrintCC1 && onPrintCC1(selectedDrawer.evidence.id)}
+                    className="w-full border-2 border-slate-800 bg-slate-800 text-white font-bold tracking-widest py-4 flex items-center justify-center gap-3 shadow-[4px_4px_0px_rgba(100,116,139,0.3)] transition-all active:shadow-none active:translate-x-[4px] active:translate-y-[4px] hover:bg-slate-700"
+                  >
+                    <Download size={18} />
+                    EXPORT_CHAIN_OF_CUSTODY
+                  </button>
+
+                  {['ADMIN', 'MALKHANA_INCHARGE'].includes(currentUser?.role) && selectedDrawer.evidence.status !== 'DISPOSED' && (
+                    <button 
+                      onClick={() => setShowDispositionModal(true)}
+                      className="w-full border-2 border-red-600 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white font-bold tracking-widest py-4 flex items-center justify-center gap-3 shadow-[4px_4px_0px_rgba(239,68,68,0.2)] transition-all active:shadow-none active:translate-x-[4px] active:translate-y-[4px]"
+                    >
+                      <Landmark size={18} />
+                      RECORD_EVIDENCE_DISPOSITION
+                    </button>
+                  )}
+                </div>
               </div>
 
             </div>
           </div>
         </div>
+      )}
+
+      {selectedDrawer && selectedDrawer.evidence && (
+        <DispositionDialog 
+          isOpen={showDispositionModal}
+          onClose={() => setShowDispositionModal(false)}
+          evidenceId={selectedDrawer.evidence.id}
+          onDispositionSuccess={handleDispositionSuccess}
+        />
       )}
     </div>
   );

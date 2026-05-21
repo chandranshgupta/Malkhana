@@ -67,7 +67,8 @@ fn ensure_archive_slots_assigned(conn: &Connection) -> Result<(), rusqlite::Erro
 
 #[tauri::command]
 pub fn get_archive_matrix(state: State<'_, DbState>) -> Result<Vec<ArchiveSlot>, String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
     
     // Auto-resolve any unassigned evidence slots
     let _ = ensure_archive_slots_assigned(&conn);
@@ -79,7 +80,8 @@ pub fn get_archive_matrix(state: State<'_, DbState>) -> Result<Vec<ArchiveSlot>,
 
 #[tauri::command]
 pub fn search_archive(query: String, state: State<'_, DbState>) -> Result<Vec<String>, String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
     
     // Auto-resolve any unassigned evidence slots
     let _ = ensure_archive_slots_assigned(&conn);

@@ -5,8 +5,9 @@ use crate::data::repository;
 
 #[tauri::command]
 pub fn get_custody_chain(evidence_id: String, state: State<'_, DbState>) -> Result<Vec<CustodyEntry>, String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    repository::get_custody_chain_for_evidence(&conn, &evidence_id).map_err(|e| format!("Query failed: {}", e))
+    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+    repository::get_custody_chain_for_evidence(conn, &evidence_id).map_err(|e| format!("Query failed: {}", e))
 }
 
 #[tauri::command]
@@ -21,10 +22,11 @@ pub fn transfer_custody(
     notes: Option<String>,
     state: State<'_, DbState>,
 ) -> Result<String, String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
     
     // 1. Retrieve the evidence item to check its hash existence
-    let _evidence = repository::get_evidence_by_id(&conn, &evidence_id)
+    let _evidence = repository::get_evidence_by_id(conn, &evidence_id)
         .map_err(|e| format!("Evidence lookup failed: {}", e))?
         .ok_or_else(|| format!("Evidence item {} not found", evidence_id))?;
     
@@ -47,13 +49,13 @@ pub fn transfer_custody(
     };
 
     // 2. Insert custody chain entry
-    repository::insert_custody_entry(&conn, &entry)
+    repository::insert_custody_entry(conn, &entry)
         .map_err(|e| format!("Custody insert failed: {}", e))?;
 
     // 3. Log to audit trail
     let actor = from_person.unwrap_or_else(|| "SYSTEM_USER".to_string());
     repository::append_audit_log(
-        &conn,
+        conn,
         "CUSTODY_TRANSFER",
         "EVIDENCE",
         &evidence_id,

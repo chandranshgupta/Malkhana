@@ -1,3 +1,12 @@
+:root {
+  --app-font-family: 'Inter', sans-serif;
+}
+
+body {
+  font-family: var(--app-font-family);
+  line-height: 1.6;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -32,13 +41,16 @@
   #certificate-print-area,
   #certificate-print-area *,
   #cc1-print-area,
-  #cc1-print-area * {
+  #cc1-print-area *,
+  #movement-register-print-area,
+  #movement-register-print-area * {
     visibility: visible;
   }
 
   /* Reset backgrounds and position the certificate/form correctly */
   #certificate-print-area,
-  #cc1-print-area {
+  #cc1-print-area,
+  #movement-register-print-area {
     position: absolute;
     left: 0;
     top: 0;

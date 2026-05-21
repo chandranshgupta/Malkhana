@@ -3,12 +3,19 @@ use std::path::{Path, PathBuf};
 use tauri::Manager;
 
 /// Resolves and ensures the existence of the secure evidence vault directory
-/// located at `{app_data_dir}/evidence_vault/`.
+/// located in the running executable's parent directory.
 pub fn prepare_vault_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let app_data_dir = app.path().app_data_dir()
-        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    let exe_dir = if let Ok(exe_path) = std::env::current_exe() {
+        exe_path.parent().map(|p| p.to_path_buf())
+    } else {
+        None
+    };
+
+    let base_dir = exe_dir.unwrap_or_else(|| {
+        app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."))
+    });
     
-    let vault_dir = app_data_dir.join("evidence_vault");
+    let vault_dir = base_dir.join("evidence_vault");
     if !vault_dir.exists() {
         fs::create_dir_all(&vault_dir)
             .map_err(|e| format!("Failed to create evidence vault directory: {}", e))?;

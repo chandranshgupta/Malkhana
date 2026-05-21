@@ -8,11 +8,32 @@
   "permissions": [
     "core:default",
     "log:default",
-    "fs:default",
-    "shell:default",
     "dialog:default",
     "notification:default",
     "process:default",
-    "store:default"
+    "store:default",
+    {
+      "identifier": "fs:allow-exe-read-recursive",
+      "allow": [{ "path": "$EXE_DIR/evidence_vault/**" }]
+    },
+    {
+      "identifier": "fs:allow-exe-write-recursive",
+      "allow": [{ "path": "$EXE_DIR/evidence_vault/**" }]
+    },
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "dc3dd",
+          "cmd": "dc3dd",
+          "sidecar": false
+        },
+        {
+          "name": "dc3dd.exe",
+          "cmd": "dc3dd.exe",
+          "sidecar": false
+        }
+      ]
+    }
   ]
 }

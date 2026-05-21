@@ -4,8 +4,9 @@ use crate::data::repository;
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, DbState>) -> Result<String, String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    let settings = repository::get_all_settings(&conn).map_err(|e| format!("Query failed: {}", e))?;
+    let guard = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+    let settings = repository::get_all_settings(conn).map_err(|e| format!("Query failed: {}", e))?;
     serde_json::to_string(&settings).map_err(|e| format!("Serialization failed: {}", e))
 }
 
@@ -13,18 +14,42 @@ pub fn get_settings(state: State<'_, DbState>) -> Result<String, String> {
 pub fn update_setting(
     key: String, 
     value: String,
-    state: State<'_, DbState>
+    state: State<'_, DbState>,
+    active_user_state: State<'_, crate::ActiveUser>,
 ) -> Result<(), String> {
-    let conn = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    repository::update_setting(&conn, &key, &value).map_err(|e| format!("Update failed: {}", e))?;
+    let guard = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
+    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+    
+    // Enforce Role-Based Access Control (RBAC) - restricted to ADMIN
+    let username = {
+        let active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+        if let Some(ref user) = *active_guard {
+            if user.role != "ADMIN" {
+                let _ = repository::append_audit_log(
+                    conn,
+                    "UNAUTHORIZED_ACCESS_ATTEMPT",
+                    "SETTING",
+                    &key,
+                    &user.username,
+                    Some(&format!("Unauthorized attempt to update setting {} to {}", key, value)),
+                );
+                return Err("UNAUTHORIZED_ACCESS".to_string());
+            }
+            user.username.clone()
+        } else {
+            return Err("UNAUTHORIZED_ACCESS".to_string());
+        }
+    };
+
+    repository::update_setting(conn, &key, &value).map_err(|e| format!("Update failed: {}", e))?;
     
     // Log the change
     let _ = repository::append_audit_log(
-        &conn,
+        conn,
         "SETTING_CHANGED",
         "SETTING",
         &key,
-        "SYSTEM_USER",
+        &username,
         Some(&format!("Updated setting {} to {}", key, value))
     );
     
@@ -80,4 +105,3 @@ pub fn get_hardware_info() -> HardwareInfo {
         total_memory_gb,
     }
 }
-
