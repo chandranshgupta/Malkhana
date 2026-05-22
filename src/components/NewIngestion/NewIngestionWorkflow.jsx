@@ -62,7 +62,6 @@ export const NewIngestionWorkflow = ({ setCurrentView }) => {
   const [cases, setCases] = useState([]);
   const [selectedCaseId, setSelectedCaseId] = useState('');
   const [selectedFilePath, setSelectedFilePath] = useState('');
-  const [computedHashes, setComputedHashes] = useState({ sha256: '', md5: '' });
 
   // USB/Disk auto-detection
   const [detectedDevices, setDetectedDevices] = useState([]);
@@ -313,7 +312,6 @@ export const NewIngestionWorkflow = ({ setCurrentView }) => {
           `[+] Imaging complete via ${result.engine} engine. Bytes copied: ${result.bytes_copied}`
         ]);
       }
-      setComputedHashes(hashes);
 
       // Serialize witness and device metadata
       const device_metadata = JSON.stringify({

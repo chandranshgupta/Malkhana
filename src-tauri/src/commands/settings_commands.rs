@@ -1,13 +1,14 @@
 use tauri::State;
 use crate::data::database::DbState;
 use crate::data::repository;
+use crate::utils::errors::AppError;
 
 #[tauri::command]
-pub fn get_settings(state: State<'_, DbState>) -> Result<String, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
-    let settings = repository::get_all_settings(conn).map_err(|e| format!("Query failed: {}", e))?;
-    serde_json::to_string(&settings).map_err(|e| format!("Serialization failed: {}", e))
+pub fn get_settings(state: State<'_, DbState>) -> Result<String, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock error: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
+    let settings = repository::get_all_settings(conn)?;
+    Ok(serde_json::to_string(&settings).map_err(|e| AppError::General(format!("Serialization failed: {}", e)))?)
 }
 
 #[tauri::command]
@@ -16,13 +17,13 @@ pub fn update_setting(
     value: String,
     state: State<'_, DbState>,
     active_user_state: State<'_, crate::ActiveUser>,
-) -> Result<(), String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<(), AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock error: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
     
     // Enforce Role-Based Access Control (RBAC) - restricted to ADMIN
     let username = {
-        let active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+        let active_guard = active_user_state.0.lock().map_err(|e| AppError::Lock(format!("Active user lock failed: {}", e)))?;
         if let Some(ref user) = *active_guard {
             if user.role != "ADMIN" {
                 let _ = repository::append_audit_log(
@@ -33,15 +34,15 @@ pub fn update_setting(
                     &user.username,
                     Some(&format!("Unauthorized attempt to update setting {} to {}", key, value)),
                 );
-                return Err("UNAUTHORIZED_ACCESS".to_string());
+                return Err(AppError::Unauthorized("UNAUTHORIZED_ACCESS".to_string()));
             }
             user.username.clone()
         } else {
-            return Err("UNAUTHORIZED_ACCESS".to_string());
+            return Err(AppError::Unauthorized("UNAUTHORIZED_ACCESS".to_string()));
         }
     };
 
-    repository::update_setting(conn, &key, &value).map_err(|e| format!("Update failed: {}", e))?;
+    repository::update_setting(conn, &key, &value)?;
     
     // Log the change
     let _ = repository::append_audit_log(

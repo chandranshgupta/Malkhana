@@ -2,12 +2,14 @@ use tauri::State;
 use crate::data::database::DbState;
 use crate::data::models::User;
 use crate::commands::user_commands::unlock_vault;
+use crate::utils::errors::AppError;
 use sha2::Digest;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SessionInitResponse {
     pub session_id: String,
     pub user: User,
+    pub preferred_language: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -156,9 +158,16 @@ fn complete_session_init(
     let mut active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
     *active_guard = Some(user.clone());
 
+    let preferred_language: Option<String> = conn.query_row(
+        "SELECT preferred_language FROM officer_profiles WHERE id = ?1",
+        rusqlite::params![user.id],
+        |row| row.get(0)
+    ).ok();
+
     Ok(SessionInitResponse {
         session_id,
         user,
+        preferred_language,
     })
 }
 
@@ -310,15 +319,15 @@ pub fn authenticate_session(
     audio_sample: Option<String>,
     state: State<'_, DbState>,
     active_user_state: State<'_, crate::ActiveUser>,
-) -> Result<SessionInitResponse, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<SessionInitResponse, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
 
     // 1. Try to find the user in officer_profiles
     let mut stmt = conn.prepare(
         "SELECT id, batch_no, full_name, rank, unit, jurisdiction, pin_hash, preferred_language 
          FROM officer_profiles WHERE batch_no = ?1"
-    ).map_err(|e| format!("Query preparation failed: {}", e))?;
+    ).map_err(AppError::Database)?;
 
     struct DbOfficer {
         id: String,
@@ -364,7 +373,7 @@ pub fn authenticate_session(
                 &device_fingerprint,
                 &camera_snapshot,
                 &audio_sample,
-            );
+            ).map_err(AppError::from);
         }
     } else {
         // Fallback: Verify against users table
@@ -376,7 +385,7 @@ pub fn authenticate_session(
             &device_fingerprint,
             &camera_snapshot,
             &audio_sample,
-        );
+        ).map_err(AppError::from);
     };
 
     complete_session_init(
@@ -386,7 +395,7 @@ pub fn authenticate_session(
         &device_fingerprint,
         &camera_snapshot,
         &audio_sample,
-    )
+    ).map_err(AppError::from)
 }
 
 #[tauri::command]
@@ -394,13 +403,13 @@ pub fn close_session(
     session_id: String,
     state: State<'_, DbState>,
     active_user_state: State<'_, crate::ActiveUser>,
-) -> Result<(), String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<(), AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
 
     let actor = active_user_state.0.lock()
         .map(|g| g.as_ref().map(|u| u.username.clone()).unwrap_or_else(|| "system".to_string()))
-        .unwrap_or_else(|_| "system".to_string());
+        .map_err(|e| AppError::Lock(format!("Active user lock failed: {}", e)))?;
 
     // 1. Log SESSION_CLOSED event to session_events
     let entry_hash = append_session_event(
@@ -411,16 +420,16 @@ pub fn close_session(
         Some(&session_id),
         &actor,
         Some("Forensic custody session closed"),
-    ).map_err(|e| format!("Failed to log session closure: {}", e))?;
+    ).map_err(AppError::Database)?;
 
     // 2. Update session with closed_at and Merkle root (which is the last entry_hash)
     conn.execute(
         "UPDATE sessions SET closed_at = datetime('now', '+5 hours', '+30 minutes'), merkle_root = ?1 WHERE id = ?2",
         rusqlite::params![entry_hash, session_id],
-    ).map_err(|e| format!("Failed to seal session in database: {}", e))?;
+    ).map_err(AppError::Database)?;
 
     // 3. Clear active user
-    let mut active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+    let mut active_guard = active_user_state.0.lock().map_err(|e| AppError::Lock(format!("Active user lock failed: {}", e)))?;
     *active_guard = None;
 
     // 4. Log to global audit log
@@ -443,9 +452,9 @@ pub fn reauth_session(
     camera_snapshot: Option<String>,
     audio_sample: Option<String>,
     state: State<'_, DbState>,
-) -> Result<bool, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<bool, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
 
     // 1. Get officer ID from session
     let (officer_id, username): (String, String) = conn.query_row(
@@ -454,14 +463,14 @@ pub fn reauth_session(
          WHERE s.id = ?1",
         rusqlite::params![session_id],
         |row| Ok((row.get(0)?, row.get(1)?))
-    ).map_err(|e| format!("Session not found: {}", e))?;
+    ).map_err(AppError::Database)?;
 
     // 2. Get pin_hash
     let pin_hash: String = conn.query_row(
         "SELECT pin_hash FROM officer_profiles WHERE id = ?1",
         rusqlite::params![officer_id],
         |row| row.get(0)
-    ).map_err(|e| format!("Officer profile not found: {}", e))?;
+    ).map_err(AppError::Database)?;
 
     // 3. Verify PIN
     let is_valid = if pin_hash == "pbkdf2_sha256_mock_hash" {
@@ -492,7 +501,7 @@ pub fn reauth_session(
         Some(&session_id),
         &username,
         Some(&details),
-    ).map_err(|e| format!("Failed to log reauth event: {}", e))?;
+    ).map_err(AppError::Database)?;
 
     // 6. Log to global audit log
     let _ = crate::data::repository::append_audit_log(
@@ -512,17 +521,17 @@ pub fn register_pin(
     batch_no: String,
     pin: String,
     state: State<'_, DbState>,
-) -> Result<(), String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<(), AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
     
     let pin_hash = crate::security::password::hash_password(&pin)
-        .map_err(|e| format!("PIN hashing failed: {}", e))?;
+        .map_err(|e| AppError::Vault(format!("PIN hashing failed: {}", e)))?;
         
     conn.execute(
         "UPDATE officer_profiles SET pin_hash = ?1, updated_at = datetime('now', '+5 hours', '+30 minutes') WHERE batch_no = ?2",
         rusqlite::params![pin_hash, batch_no],
-    ).map_err(|e| format!("Database update failed: {}", e))?;
+    ).map_err(AppError::Database)?;
     
     Ok(())
 }
@@ -532,12 +541,13 @@ pub fn save_encrypted_vault_key(
     pin: String,
     master_password: String,
     app: tauri::AppHandle,
-) -> Result<(), String> {
-    let encrypted_hex = crate::security::key_derivation::encrypt_master_key(&master_password, &pin)?;
+) -> Result<(), AppError> {
+    let encrypted_hex = crate::security::key_derivation::encrypt_master_key(&master_password, &pin)
+        .map_err(AppError::Vault)?;
     let pin_vault_path = resolve_pin_vault_path(&app);
     
     std::fs::write(&pin_vault_path, encrypted_hex)
-        .map_err(|e| format!("Failed to save PIN vault: {}", e))?;
+        .map_err(AppError::Io)?;
         
     Ok(())
 }
@@ -547,32 +557,33 @@ pub fn try_pin_unlock(
     pin: String,
     app: tauri::AppHandle,
     state: State<'_, DbState>,
-) -> Result<bool, String> {
+) -> Result<bool, AppError> {
     let pin_vault_path = resolve_pin_vault_path(&app);
     if !pin_vault_path.exists() {
-        return Err("NO_PIN_VAULT".to_string());
+        return Err(AppError::Vault("NO_PIN_VAULT".to_string()));
     }
     
     let encrypted_hex = std::fs::read_to_string(&pin_vault_path)
-        .map_err(|e| format!("Failed to read PIN vault: {}", e))?;
+        .map_err(AppError::Io)?;
         
-    let decrypted_password = crate::security::key_derivation::decrypt_master_key(&encrypted_hex, &pin)?;
+    let decrypted_password = crate::security::key_derivation::decrypt_master_key(&encrypted_hex, &pin)
+        .map_err(AppError::Vault)?;
     
     // Attempt unlock using the decrypted master password
     unlock_vault(decrypted_password, app, state)
 }
 
 #[tauri::command]
-pub fn delete_pin_vault(app: tauri::AppHandle) -> Result<(), String> {
+pub fn delete_pin_vault(app: tauri::AppHandle) -> Result<(), AppError> {
     let path = resolve_pin_vault_path(&app);
     if path.exists() {
-        std::fs::remove_file(path).map_err(|e| format!("Failed to delete PIN vault: {}", e))?;
+        std::fs::remove_file(path).map_err(AppError::Io)?;
     }
     Ok(())
 }
 
 #[tauri::command]
-pub fn is_pin_vault_enabled(app: tauri::AppHandle) -> Result<bool, String> {
+pub fn is_pin_vault_enabled(app: tauri::AppHandle) -> Result<bool, AppError> {
     Ok(resolve_pin_vault_path(&app).exists())
 }
 
@@ -584,9 +595,9 @@ pub fn cosign_session(
     batch_no: String,
     signature: String,
     state: State<'_, DbState>,
-) -> Result<(), String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<(), AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
 
     let cosigner_id = uuid::Uuid::new_v4().to_string();
 
@@ -594,7 +605,7 @@ pub fn cosign_session(
         "INSERT INTO session_cosigners (id, session_id, cosigner_name, cosigner_rank, cosigner_batch_no, signature)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         rusqlite::params![cosigner_id, session_id, name, rank, batch_no, signature],
-    ).map_err(|e| format!("Failed to write cosigner: {}", e))?;
+    ).map_err(AppError::Database)?;
 
     // Log event in session
     let _ = append_session_event(
@@ -615,28 +626,28 @@ pub fn log_system_health_event(
     event_type: String,
     details: String,
     state: State<'_, DbState>,
-) -> Result<(), String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<(), AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
 
     let event_id = uuid::Uuid::new_v4().to_string();
 
     conn.execute(
         "INSERT INTO system_health_log (id, event_type, details) VALUES (?1, ?2, ?3)",
         rusqlite::params![event_id, event_type, details],
-    ).map_err(|e| format!("Failed to log system health: {}", e))?;
+    ).map_err(AppError::Database)?;
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_system_health_log(state: State<'_, DbState>) -> Result<Vec<SystemHealthEntry>, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+pub fn get_system_health_log(state: State<'_, DbState>) -> Result<Vec<SystemHealthEntry>, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
 
     let mut stmt = conn.prepare(
         "SELECT id, event_type, details, timestamp FROM system_health_log ORDER BY timestamp DESC"
-    ).map_err(|e| format!("Failed to prepare query: {}", e))?;
+    ).map_err(AppError::Database)?;
 
     let entries = stmt.query_map([], |row| {
         Ok(SystemHealthEntry {
@@ -645,9 +656,183 @@ pub fn get_system_health_log(state: State<'_, DbState>) -> Result<Vec<SystemHeal
             details: row.get(2)?,
             timestamp: row.get(3)?,
         })
-    }).map_err(|e| format!("Query map failed: {}", e))?
+    }).map_err(AppError::Database)?
       .collect::<Result<Vec<_>, _>>()
-      .map_err(|e| format!("Collection failed: {}", e))?;
+      .map_err(AppError::Database)?;
 
     Ok(entries)
+}
+
+#[tauri::command]
+pub fn update_officer_language(
+    batch_no: String,
+    lang: String,
+    state: State<'_, DbState>,
+) -> Result<(), AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
+
+    conn.execute(
+        "UPDATE officer_profiles SET preferred_language = ?1, updated_at = datetime('now', '+5 hours', '+30 minutes') WHERE batch_no = ?2",
+        rusqlite::params![lang, batch_no],
+    ).map_err(AppError::Database)?;
+
+    log::info!("Updated preferred language for officer {} to {}", batch_no, lang);
+    Ok(())
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct SessionDetail {
+    pub id: String,
+    pub officer_id: String,
+    pub officer_name: String,
+    pub officer_role: String,
+    pub device_fingerprint: String,
+    pub opened_at: String,
+    pub closed_at: Option<String>,
+    pub cosigner_count: i32,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct SessionEventEntry {
+    pub id: String,
+    pub session_id: String,
+    pub event_type: String,
+    pub entity_type: Option<String>,
+    pub entity_id: Option<String>,
+    pub details: Option<String>,
+    pub timestamp: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct SessionCosignerEntry {
+    pub id: String,
+    pub session_id: String,
+    pub cosigner_name: String,
+    pub cosigner_rank: String,
+    pub cosigner_batch_no: String,
+    pub timestamp: String,
+}
+
+#[tauri::command]
+pub fn get_all_sessions(state: State<'_, DbState>) -> Result<Vec<SessionDetail>, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
+
+    let mut stmt = conn.prepare(
+        "SELECT s.id, s.officer_id, u.full_name, u.role, s.device_fingerprint, s.opened_at, s.closed_at,
+         (SELECT COUNT(*) FROM session_cosigners c WHERE c.session_id = s.id) as cosigner_count
+         FROM sessions s
+         JOIN users u ON s.officer_id = u.id
+         ORDER BY s.opened_at DESC"
+    ).map_err(AppError::Database)?;
+
+    let sessions = stmt.query_map([], |row| {
+        Ok(SessionDetail {
+            id: row.get(0)?,
+            officer_id: row.get(1)?,
+            officer_name: row.get(2)?,
+            officer_role: row.get(3)?,
+            device_fingerprint: row.get(4)?,
+            opened_at: row.get(5)?,
+            closed_at: row.get(6)?,
+            cosigner_count: row.get(7)?,
+        })
+    }).map_err(AppError::Database)?
+      .collect::<Result<Vec<_>, _>>()
+      .map_err(AppError::Database)?;
+
+    Ok(sessions)
+}
+
+#[tauri::command]
+pub fn get_session_events(
+    session_id: String,
+    state: State<'_, DbState>,
+) -> Result<Vec<SessionEventEntry>, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, session_id, event_type, entity_type, entity_id, details, timestamp 
+         FROM session_events WHERE session_id = ?1 ORDER BY timestamp ASC"
+    ).map_err(AppError::Database)?;
+
+    let events = stmt.query_map(rusqlite::params![session_id], |row| {
+        Ok(SessionEventEntry {
+            id: row.get(0)?,
+            session_id: row.get(1)?,
+            event_type: row.get(2)?,
+            entity_type: row.get(3)?,
+            entity_id: row.get(4)?,
+            details: row.get(5)?,
+            timestamp: row.get(6)?,
+        })
+    }).map_err(AppError::Database)?
+      .collect::<Result<Vec<_>, _>>()
+      .map_err(AppError::Database)?;
+
+    Ok(events)
+}
+
+#[tauri::command]
+pub fn get_session_cosigners(
+    session_id: String,
+    state: State<'_, DbState>,
+) -> Result<Vec<SessionCosignerEntry>, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
+
+    let mut stmt = conn.prepare(
+        "SELECT id, session_id, cosigner_name, cosigner_rank, cosigner_batch_no, timestamp 
+         FROM session_cosigners WHERE session_id = ?1 ORDER BY timestamp ASC"
+    ).map_err(AppError::Database)?;
+
+    let cosigners = stmt.query_map(rusqlite::params![session_id], |row| {
+        Ok(SessionCosignerEntry {
+            id: row.get(0)?,
+            session_id: row.get(1)?,
+            cosigner_name: row.get(2)?,
+            cosigner_rank: row.get(3)?,
+            cosigner_batch_no: row.get(4)?,
+            timestamp: row.get(5)?,
+        })
+    }).map_err(AppError::Database)?
+      .collect::<Result<Vec<_>, _>>()
+      .map_err(AppError::Database)?;
+
+    Ok(cosigners)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::database::open_db_with_key;
+
+    #[test]
+    fn test_preferred_language_sync() {
+        let conn = open_db_with_key(":memory:", "malkhana-vault-2024-secure-key-v1").unwrap();
+
+        // 1. Verify default seed language is 'en'
+        let preferred_lang: Option<String> = conn.query_row(
+            "SELECT preferred_language FROM officer_profiles WHERE id = 'op_092'",
+            [],
+            |row| row.get(0)
+        ).unwrap();
+        assert_eq!(preferred_lang, Some("en".to_string()));
+
+        // 2. Simulate language update to 'hi' for batch_no 'op_092'
+        conn.execute(
+            "UPDATE officer_profiles SET preferred_language = ?1, updated_at = datetime('now', '+5 hours', '+30 minutes') WHERE batch_no = ?2",
+            rusqlite::params!["hi", "op_092"],
+        ).unwrap();
+
+        // 3. Verify language is updated to 'hi' when queried by id 'op_092'
+        let updated_lang: Option<String> = conn.query_row(
+            "SELECT preferred_language FROM officer_profiles WHERE id = 'op_092'",
+            [],
+            |row| row.get(0)
+        ).unwrap();
+        assert_eq!(updated_lang, Some("hi".to_string()));
+    }
 }

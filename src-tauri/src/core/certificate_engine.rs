@@ -4,7 +4,12 @@ use crate::data::models::{Certificate, CertificateInput};
 /// FORENSIC: Computes a SHA-256 document seal hash over all certificate fields.
 /// This hash proves the certificate content has not been altered after sealing.
 /// Any change to any field will produce a completely different hash.
-pub fn compute_document_hash(input: &CertificateInput, evidence_hash: &str, timestamp: &str) -> String {
+pub fn compute_document_hash(
+    input: &CertificateInput,
+    evidence_hash: &str,
+    timestamp: &str,
+    compliance_note: Option<&str>,
+) -> String {
     let mut hasher = Sha256::new();
 
     // Hash all certificate fields in a deterministic order
@@ -39,6 +44,8 @@ pub fn compute_document_hash(input: &CertificateInput, evidence_hash: &str, time
     hasher.update(evidence_hash.as_bytes());
     hasher.update(b"|");
     hasher.update(timestamp.as_bytes());
+    hasher.update(b"|");
+    hasher.update(compliance_note.unwrap_or("").as_bytes());
 
     format!("{:x}", hasher.finalize())
 }
@@ -49,8 +56,9 @@ pub fn build_certificate(
     input: &CertificateInput,
     evidence_hash: &str,
     timestamp: &str,
+    compliance_note: Option<String>,
 ) -> Certificate {
-    let document_hash = compute_document_hash(input, evidence_hash, timestamp);
+    let document_hash = compute_document_hash(input, evidence_hash, timestamp, compliance_note.as_deref());
 
     Certificate {
         id: cert_id.to_string(),
@@ -72,6 +80,7 @@ pub fn build_certificate(
         document_hash,
         is_locked: true,
         signed_at: Some(timestamp.to_string()),
+        compliance_note,
         created_at: timestamp.to_string(),
     }
 }

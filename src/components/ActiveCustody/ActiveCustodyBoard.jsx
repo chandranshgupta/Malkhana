@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WireframePerson } from '../shared/Wireframes';
-import { getEvidenceLog, getCustodyChain, transferCustody } from '../../api/invoke';
+import { getEvidenceLog, getCustodyChain, transferCustody, verifyForensicIntegrity } from '../../api/invoke';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
 import { 
@@ -210,8 +210,13 @@ export const ActiveCustodyBoard = ({ currentUser }) => {
       setComputedHash(sha256);
       setComputedMd5(result.md5);
       
-      if (selectedEvidence && sha256 === selectedEvidence.hash_sha256) {
-        setHashMatchStatus('match');
+      if (selectedEvidence) {
+        const checkResult = await verifyForensicIntegrity(
+          selectedEvidence.hash_sha256 || '',
+          selectedEvidence.hash_sha256 || '',
+          sha256
+        );
+        setHashMatchStatus(checkResult.fully_authentic ? 'match' : 'mismatch');
       } else {
         setHashMatchStatus('mismatch');
       }
@@ -228,20 +233,44 @@ export const ActiveCustodyBoard = ({ currentUser }) => {
     }
   };
 
-  const handleSimulateVerification = () => {
+  const handleSimulateVerification = async () => {
     if (!selectedEvidence) return;
     setFilePath('SIMULATED_INTEGRITY_VERIFIED');
-    setComputedHash(selectedEvidence.hash_sha256);
+    const sha256 = selectedEvidence.hash_sha256;
+    setComputedHash(sha256);
     setComputedMd5(selectedEvidence.hash_md5 || 'N/A');
-    setHashMatchStatus('match');
+    
+    try {
+      const checkResult = await verifyForensicIntegrity(
+        selectedEvidence.hash_sha256 || '',
+        selectedEvidence.hash_sha256 || '',
+        sha256
+      );
+      setHashMatchStatus(checkResult.fully_authentic ? 'match' : 'mismatch');
+    } catch (e) {
+      console.error(e);
+      setHashMatchStatus('mismatch');
+    }
   };
 
-  const handleSimulateTamper = () => {
+  const handleSimulateTamper = async () => {
     if (!selectedEvidence) return;
     setFilePath('SIMULATED_TAMPER_ALERT');
-    setComputedHash('E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855');
+    const sha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855';
+    setComputedHash(sha256);
     setComputedMd5('D41D8CD98F00B204E9800998ECF8427E');
-    setHashMatchStatus('mismatch');
+    
+    try {
+      const checkResult = await verifyForensicIntegrity(
+        selectedEvidence.hash_sha256 || '',
+        selectedEvidence.hash_sha256 || '',
+        sha256
+      );
+      setHashMatchStatus(checkResult.fully_authentic ? 'match' : 'mismatch');
+    } catch (e) {
+      console.error(e);
+      setHashMatchStatus('mismatch');
+    }
   };
 
   // Authenticate the recipient password

@@ -1,6 +1,7 @@
 use tauri::State;
 use crate::data::database::DbState;
 use crate::data::repository;
+use crate::utils::errors::AppError;
 
 #[tauri::command]
 pub fn dispose_evidence(
@@ -12,13 +13,13 @@ pub fn dispose_evidence(
     notes: String,
     state: State<'_, DbState>,
     active_user_state: State<'_, crate::ActiveUser>,
-) -> Result<(), String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<(), AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
 
     // 1. Enforce Role-Based Access Control (RBAC) - restricted to ADMIN or MALKHANA_INCHARGE
     let username = {
-        let active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+        let active_guard = active_user_state.0.lock().map_err(|e| AppError::Lock(format!("Active user lock failed: {}", e)))?;
         if let Some(ref user) = *active_guard {
             if user.role != "ADMIN" && user.role != "MALKHANA_INCHARGE" {
                 let _ = repository::append_audit_log(
@@ -29,18 +30,17 @@ pub fn dispose_evidence(
                     &user.username,
                     Some(&format!("Unauthorized attempt to dispose evidence {}", evidence_id)),
                 );
-                return Err("UNAUTHORIZED_ACCESS".to_string());
+                return Err(AppError::Unauthorized("UNAUTHORIZED_ACCESS".to_string()));
             }
             user.username.clone()
         } else {
-            return Err("UNAUTHORIZED_ACCESS".to_string());
+            return Err(AppError::Unauthorized("UNAUTHORIZED_ACCESS".to_string()));
         }
     };
 
     // 2. Fetch evidence item
-    let evidence = repository::get_evidence_by_id(conn, &evidence_id)
-        .map_err(|e| format!("Evidence lookup failed: {}", e))?
-        .ok_or_else(|| format!("Evidence item {} not found", evidence_id))?;
+    let evidence = repository::get_evidence_by_id(conn, &evidence_id)?
+        .ok_or_else(|| AppError::Validation(format!("Evidence item {} not found", evidence_id)))?;
 
     let now = crate::core::time_authority::current_timestamp_iso8601();
     
@@ -48,13 +48,13 @@ pub fn dispose_evidence(
     conn.execute(
         "UPDATE evidence SET status = 'DISPOSED', storage_location = NULL WHERE id = ?1",
         rusqlite::params![evidence_id],
-    ).map_err(|e| format!("Failed to update evidence status: {}", e))?;
+    )?;
 
     // 4. Free the assigned slot in the archive_matrix table
     conn.execute(
         "UPDATE archive_matrix SET evidence_id = NULL, status = 'EMPTY', assigned_at = NULL WHERE evidence_id = ?1",
         rusqlite::params![evidence_id],
-    ).map_err(|e| format!("Failed to update archive matrix slot: {}", e))?;
+    )?;
 
     // 5. Determine custody action
     let custody_action = if disposition_type == "Return to Owner" {
@@ -85,8 +85,7 @@ pub fn dispose_evidence(
     };
 
     // 6. Insert custody chain entry
-    repository::insert_custody_entry(conn, &entry)
-        .map_err(|e| format!("Custody entry insert failed: {}", e))?;
+    repository::insert_custody_entry(conn, &entry)?;
 
     // 7. Log to audit trail
     repository::append_audit_log(
@@ -99,7 +98,7 @@ pub fn dispose_evidence(
             "Evidence {} disposed via {} under Magistrate Order {}. Disposed to: {}",
             evidence_id, disposition_type, magistrate_order_no, disposed_to
         )),
-    ).map_err(|e| format!("Audit log failed: {}", e))?;
+    )?;
 
     Ok(())
 }

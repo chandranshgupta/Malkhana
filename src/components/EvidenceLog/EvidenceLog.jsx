@@ -113,8 +113,8 @@ export const EvidenceLog = ({ setCurrentView, currentUser, searchQuery = '', onD
       try {
         const res = await verifyForensicIntegrity(evidenceDetails.hash_sha256, transferHash, null);
         setHashVerificationStatus({
-          matched: res.matched,
-          details: res.details
+          matched: res.fully_authentic !== undefined ? res.fully_authentic : res.fullyAuthentic,
+          details: res.notes
         });
       } catch (err) {
         console.error("Integrity check failed:", err);

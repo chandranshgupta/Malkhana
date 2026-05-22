@@ -115,6 +115,7 @@ pub struct Certificate {
     pub document_hash: String,
     pub is_locked: bool,
     pub signed_at: Option<String>,
+    pub compliance_note: Option<String>,
     pub created_at: String,
 }
 

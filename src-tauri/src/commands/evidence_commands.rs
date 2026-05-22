@@ -2,22 +2,22 @@ use tauri::State;
 use crate::data::database::DbState;
 use crate::data::models::{EvidenceCard, EvidenceStamp};
 use crate::data::repository;
+use crate::utils::errors::AppError;
 
 #[tauri::command]
-pub fn get_evidence_details(id: String, db: State<DbState>) -> Result<Option<crate::data::models::Evidence>, String> {
-    let guard = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
-    repository::get_evidence_by_id(conn, &id).map_err(|e| format!("Query failed: {}", e))
+pub fn get_evidence_details(id: String, db: State<DbState>) -> Result<Option<crate::data::models::Evidence>, AppError> {
+    let guard = db.0.lock().map_err(|e| AppError::Lock(format!("DB lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
+    Ok(repository::get_evidence_by_id(conn, &id)?)
 }
 
 /// Returns evidence items formatted for the EvidenceLog UI view.
 /// Reads from the database and transforms into the card format expected by React.
 #[tauri::command]
-pub fn get_evidence_log(db: State<DbState>) -> Result<Vec<EvidenceCard>, String> {
-    let guard = db.0.lock().map_err(|e| format!("DB lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
-    let evidence_list = repository::get_all_evidence(conn)
-        .map_err(|e| format!("Query failed: {}", e))?;
+pub fn get_evidence_log(db: State<DbState>) -> Result<Vec<EvidenceCard>, AppError> {
+    let guard = db.0.lock().map_err(|e| AppError::Lock(format!("DB lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
+    let evidence_list = repository::get_all_evidence(conn)?;
 
     let cards: Vec<EvidenceCard> = evidence_list.into_iter().map(|ev| {
         // Parse tags from JSON string to Vec<String>
@@ -98,13 +98,13 @@ pub fn ingest_evidence(
     input: IngestEvidenceInput,
     state: State<'_, DbState>,
     active_user_state: State<'_, crate::ActiveUser>,
-) -> Result<String, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<String, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock error: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
 
     // Enforce Role-Based Access Control (RBAC) - restricted to ADMIN, MALKHANA_INCHARGE, or IO
     let username = {
-        let active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+        let active_guard = active_user_state.0.lock().map_err(|e| AppError::Lock(format!("Active user lock failed: {}", e)))?;
         if let Some(ref user) = *active_guard {
             if user.role != "ADMIN" && user.role != "MALKHANA_INCHARGE" && user.role != "IO" {
                 let _ = repository::append_audit_log(
@@ -115,11 +115,11 @@ pub fn ingest_evidence(
                     &user.username,
                     Some(&format!("Unauthorized attempt to ingest evidence type {} for case {}", input.asset_type, input.case_id)),
                 );
-                return Err("UNAUTHORIZED_ACCESS".to_string());
+                return Err(AppError::Unauthorized("UNAUTHORIZED_ACCESS".to_string()));
             }
             user.username.clone()
         } else {
-            return Err("UNAUTHORIZED_ACCESS".to_string());
+            return Err(AppError::Unauthorized("UNAUTHORIZED_ACCESS".to_string()));
         }
     };
     
@@ -171,7 +171,7 @@ pub fn ingest_evidence(
         created_at: now.clone(),
     };
 
-    repository::insert_evidence(conn, &new_evidence).map_err(|e| format!("Failed to insert evidence: {}", e))?;
+    repository::insert_evidence(conn, &new_evidence)?;
     
     // Insert archive slot in archive_matrix
     if let Some(ref loc) = allocated_location {
@@ -179,7 +179,7 @@ pub fn ingest_evidence(
             "INSERT OR REPLACE INTO archive_matrix (location, evidence_id, vault_level, status, assigned_at)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             rusqlite::params![loc, evidence_id.clone(), 3, "SEALED", now.clone()],
-        ).map_err(|e| format!("Failed to assign archive slot: {}", e))?;
+        )?;
     }
 
     // Add initial custody chain entry
@@ -198,7 +198,7 @@ pub fn ingest_evidence(
         signature: Some("DIGITAL_SIGNATURE_OK".to_string()),
         timestamp: now.clone(),
     };
-    repository::insert_custody_entry(conn, &initial_custody).map_err(|e| format!("Failed to write custody log: {}", e))?;
+    repository::insert_custody_entry(conn, &initial_custody)?;
 
     // Log the event in the audit trail
     repository::append_audit_log(
@@ -208,20 +208,18 @@ pub fn ingest_evidence(
         &evidence_id,
         &username,
         Some(&format!("Evidence {} (type {}) ingested for case {}", evidence_id, input.asset_type, input.case_id))
-    ).map_err(|e| format!("Failed to write audit log: {}", e))?;
+    )?;
 
     Ok(evidence_id)
 }
 
 #[tauri::command]
-pub fn hash_file(path: String) -> Result<serde_json::Value, String> {
-    match crate::core::hash_engine::hash_file_chunked(path) {
-        Ok(result) => Ok(serde_json::json!({
-            "sha256": result.sha256,
-            "md5": result.md5
-        })),
-        Err(e) => Err(format!("Hashing failed: {}", e)),
-    }
+pub fn hash_file(path: String) -> Result<serde_json::Value, AppError> {
+    let result = crate::core::hash_engine::hash_file_chunked(path)?;
+    Ok(serde_json::json!({
+        "sha256": result.sha256,
+        "md5": result.md5
+    }))
 }
 
 #[tauri::command]
@@ -229,13 +227,13 @@ pub fn acquire_forensic_image(
     window: tauri::Window,
     source: String,
     destination: String,
-) -> Result<crate::core::imaging_engine::ImagingResult, String> {
-    crate::core::imaging_engine::run_forensic_imaging(window, source, destination)
+) -> Result<crate::core::imaging_engine::ImagingResult, AppError> {
+    Ok(crate::core::imaging_engine::run_forensic_imaging(window, source, destination)?)
 }
 
 #[tauri::command]
-pub fn detect_devices() -> Result<Vec<crate::core::device_detector::RemovableDevice>, String> {
-    crate::core::device_detector::detect_external_drives()
+pub fn detect_devices() -> Result<Vec<crate::core::device_detector::RemovableDevice>, AppError> {
+    Ok(crate::core::device_detector::detect_external_drives()?)
 }
 
 #[tauri::command]

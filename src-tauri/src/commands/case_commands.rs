@@ -3,6 +3,7 @@ use uuid::Uuid;
 use crate::data::database::DbState;
 use crate::data::models::Case;
 use crate::data::repository;
+use crate::utils::errors::AppError;
 
 #[tauri::command]
 pub fn create_case(
@@ -11,9 +12,9 @@ pub fn create_case(
     io: String,
     jurisdiction: String,
     state: State<'_, DbState>,
-) -> Result<String, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<String, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock error: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
     
     let now = crate::core::time_authority::current_timestamp_iso8601();
         
@@ -32,7 +33,7 @@ pub fn create_case(
         updated_at: now,
     };
 
-    repository::insert_case(conn, &new_case).map_err(|e| format!("Failed to insert case: {}", e))?;
+    repository::insert_case(conn, &new_case)?;
     
     repository::append_audit_log(
         conn,
@@ -41,14 +42,14 @@ pub fn create_case(
         &id,
         "SYSTEM_USER",
         Some(&format!("Case {} created for FIR {}", id, fir))
-    ).map_err(|e| format!("Failed to write audit log: {}", e))?;
+    )?;
 
     Ok(id)
 }
 
 #[tauri::command]
-pub fn get_all_cases(state: State<'_, DbState>) -> Result<Vec<Case>, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock error: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
-    repository::get_all_cases(conn).map_err(|e| format!("Query failed: {}", e))
+pub fn get_all_cases(state: State<'_, DbState>) -> Result<Vec<Case>, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock error: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
+    Ok(repository::get_all_cases(conn)?)
 }

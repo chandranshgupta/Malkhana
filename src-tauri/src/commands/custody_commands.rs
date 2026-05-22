@@ -2,12 +2,13 @@ use tauri::State;
 use crate::data::database::DbState;
 use crate::data::models::CustodyEntry;
 use crate::data::repository;
+use crate::utils::errors::AppError;
 
 #[tauri::command]
-pub fn get_custody_chain(evidence_id: String, state: State<'_, DbState>) -> Result<Vec<CustodyEntry>, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
-    repository::get_custody_chain_for_evidence(conn, &evidence_id).map_err(|e| format!("Query failed: {}", e))
+pub fn get_custody_chain(evidence_id: String, state: State<'_, DbState>) -> Result<Vec<CustodyEntry>, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
+    Ok(repository::get_custody_chain_for_evidence(conn, &evidence_id)?)
 }
 
 #[tauri::command]
@@ -21,14 +22,13 @@ pub fn transfer_custody(
     hash_verified: bool,
     notes: Option<String>,
     state: State<'_, DbState>,
-) -> Result<String, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<String, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
     
     // 1. Retrieve the evidence item to check its hash existence
-    let _evidence = repository::get_evidence_by_id(conn, &evidence_id)
-        .map_err(|e| format!("Evidence lookup failed: {}", e))?
-        .ok_or_else(|| format!("Evidence item {} not found", evidence_id))?;
+    let _evidence = repository::get_evidence_by_id(conn, &evidence_id)?
+        .ok_or_else(|| AppError::Validation(format!("Evidence item {} not found", evidence_id)))?;
     
     let now = crate::core::time_authority::current_timestamp_iso8601();
     let custody_id = format!("CUST-{}", uuid::Uuid::new_v4().simple().to_string()[..8].to_uppercase());
@@ -49,8 +49,7 @@ pub fn transfer_custody(
     };
 
     // 2. Insert custody chain entry
-    repository::insert_custody_entry(conn, &entry)
-        .map_err(|e| format!("Custody insert failed: {}", e))?;
+    repository::insert_custody_entry(conn, &entry)?;
 
     // 3. Log to audit trail
     let actor = from_person.unwrap_or_else(|| "SYSTEM_USER".to_string());
@@ -64,7 +63,7 @@ pub fn transfer_custody(
             "Evidence {} custody transferred to {} (Role: {}, Notes: {:?}, Hash Verified: {})",
             evidence_id, to_person, role, notes, hash_verified
         )),
-    ).map_err(|e| format!("Audit log failed: {}", e))?;
+    )?;
 
     Ok(custody_id)
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAuditLog, verifyAuditLogTrail } from '../../api/invoke';
-import { ShieldCheck, ShieldAlert, CheckCircle2, History, RotateCw, Fingerprint } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, CheckCircle2, History, RotateCw, Fingerprint, ArrowLeft } from 'lucide-react';
 
 export const AuditTrail = ({ onBack }) => {
   const [logs, setLogs] = useState([]);
@@ -48,6 +48,15 @@ export const AuditTrail = ({ onBack }) => {
       <div className="p-8 border-b border-slate-400 bg-white/40 flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tighter flex items-center gap-3">
+            {onBack && (
+              <button 
+                onClick={onBack}
+                className="mr-2 p-1.5 border-2 border-slate-500 bg-white hover:bg-slate-50 rounded shadow-[2px_2px_0px_rgba(0,0,0,0.1)] active:shadow-none active:translate-x-[2px] active:translate-y-[2px]"
+                title="Back to Evidence Log"
+              >
+                <ArrowLeft size={20} />
+              </button>
+            )}
             <History className="text-slate-500" size={32} />
             AUDIT_TRAIL_LEDGER
           </h2>

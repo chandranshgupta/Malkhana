@@ -76,6 +76,10 @@ pub fn run() {
             commands::session_commands::cosign_session,
             commands::session_commands::log_system_health_event,
             commands::session_commands::get_system_health_log,
+            commands::session_commands::update_officer_language,
+            commands::session_commands::get_all_sessions,
+            commands::session_commands::get_session_events,
+            commands::session_commands::get_session_cosigners,
             commands::disposition_commands::dispose_evidence,
         ])
 

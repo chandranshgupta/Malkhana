@@ -2,16 +2,17 @@ use tauri::State;
 use crate::data::database::DbState;
 use crate::data::models::User;
 use crate::data::repository;
+use crate::utils::errors::AppError;
 
 #[tauri::command]
-pub fn is_vault_initialized(app: tauri::AppHandle) -> Result<bool, String> {
+pub fn is_vault_initialized(app: tauri::AppHandle) -> Result<bool, AppError> {
     let db_path = crate::data::database::resolve_db_path(&app);
     Ok(db_path.exists())
 }
 
 #[tauri::command]
-pub fn is_vault_locked(state: State<'_, DbState>) -> Result<bool, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+pub fn is_vault_locked(state: State<'_, DbState>) -> Result<bool, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
     Ok(guard.is_none())
 }
 
@@ -20,7 +21,7 @@ pub fn unlock_vault(
     password: String,
     app: tauri::AppHandle,
     state: State<'_, DbState>,
-) -> Result<bool, String> {
+) -> Result<bool, AppError> {
     let db_path = crate::data::database::resolve_db_path(&app);
     let derived_user_key = format!(
         "x'{}'",
@@ -28,7 +29,7 @@ pub fn unlock_vault(
     );
     
     // 1. Attempt to open DB with the derived user key
-    let conn = if let Ok(c) = crate::data::database::open_db_with_key(&db_path, &derived_user_key) {
+    let conn = if let Ok(c) = crate::data::database::try_open_or_restore(&db_path, &derived_user_key) {
         c
     } else {
         // 2. Fallback: Try raw user password (legacy format)
@@ -37,10 +38,10 @@ pub fn unlock_vault(
                 Ok(_) => {
                     log::info!("Successfully migrated SQLCipher database from raw master password to derived key");
                     drop(old_conn);
-                    crate::data::database::open_db_with_key(&db_path, &derived_user_key)
-                        .map_err(|err| format!("Failed to open DB after migrating raw password: {}", err))?
+                    crate::data::database::try_open_or_restore(&db_path, &derived_user_key)
+                        .map_err(|err| AppError::Vault(format!("Failed to open DB after migrating raw password: {}", err)))?
                 }
-                Err(err) => return Err(format!("Failed to rekey database from raw password: {}", err)),
+                Err(err) => return Err(AppError::Vault(format!("Failed to rekey database from raw password: {}", err))),
             }
         }
         // 3. Fallback: Try derived dev key
@@ -55,10 +56,10 @@ pub fn unlock_vault(
                     Ok(_) => {
                         log::info!("Successfully migrated SQLCipher database from derived dev key to derived user key");
                         drop(old_conn);
-                        crate::data::database::open_db_with_key(&db_path, &derived_user_key)
-                            .map_err(|err| format!("Failed to open DB after migrating derived dev key: {}", err))?
+                        crate::data::database::try_open_or_restore(&db_path, &derived_user_key)
+                            .map_err(|err| AppError::Vault(format!("Failed to open DB after migrating derived dev key: {}", err)))?
                     }
-                    Err(err) => return Err(format!("Failed to rekey database from derived dev key: {}", err)),
+                    Err(err) => return Err(AppError::Vault(format!("Failed to rekey database from derived dev key: {}", err))),
                 }
             }
             // 4. Fallback: Try legacy raw dev key
@@ -67,18 +68,18 @@ pub fn unlock_vault(
                     Ok(_) => {
                         log::info!("Successfully migrated SQLCipher database from legacy raw dev key to derived user key");
                         drop(old_conn);
-                        crate::data::database::open_db_with_key(&db_path, &derived_user_key)
-                            .map_err(|err| format!("Failed to open DB after migrating raw dev key: {}", err))?
+                        crate::data::database::try_open_or_restore(&db_path, &derived_user_key)
+                            .map_err(|err| AppError::Vault(format!("Failed to open DB after migrating raw dev key: {}", err)))?
                     }
-                    Err(err) => return Err(format!("Failed to rekey database from legacy raw dev key: {}", err)),
+                    Err(err) => return Err(AppError::Vault(format!("Failed to rekey database from legacy raw dev key: {}", err))),
                 }
             } else {
-                return Err("DECRYPTION_FAILED: Invalid decryption key.".to_string());
+                return Err(AppError::Vault("DECRYPTION_FAILED: Invalid decryption key.".to_string()));
             }
         }
     };
         
-    let mut guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+    let mut guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
     *guard = Some(conn);
     
     Ok(true)
@@ -88,21 +89,21 @@ pub fn unlock_vault(
 pub fn lock_vault(
     state: State<'_, DbState>,
     active_user_state: State<'_, crate::ActiveUser>,
-) -> Result<(), String> {
-    let mut guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+) -> Result<(), AppError> {
+    let mut guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
     *guard = None;
 
-    let mut active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+    let mut active_guard = active_user_state.0.lock().map_err(|e| AppError::Lock(format!("Active user lock failed: {}", e)))?;
     *active_guard = None;
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_all_users(state: State<'_, DbState>) -> Result<Vec<User>, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
-    repository::get_all_users(conn).map_err(|e| format!("Query failed: {}", e))
+pub fn get_all_users(state: State<'_, DbState>) -> Result<Vec<User>, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
+    repository::get_all_users(conn).map_err(AppError::Database)
 }
 
 #[tauri::command]
@@ -111,15 +112,15 @@ pub fn authenticate_user(
     password: String,
     state: State<'_, DbState>,
     active_user_state: State<'_, crate::ActiveUser>,
-) -> Result<User, String> {
-    let guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
-    let conn = guard.as_ref().ok_or("VAULT_LOCKED")?;
+) -> Result<User, AppError> {
+    let guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
+    let conn = guard.as_ref().ok_or_else(|| AppError::Vault("VAULT_LOCKED".to_string()))?;
 
     // 1. Fetch user status and login/lockout details
     let mut stmt = conn.prepare(
         "SELECT id, username, password_hash, role, full_name, designation, organization, public_key, is_active, created_at, updated_at, failed_login_attempts, locked_until 
          FROM users WHERE username = ?1"
-    ).map_err(|e| format!("Query preparation failed: {}", e))?;
+    ).map_err(AppError::Database)?;
 
     struct DbUser {
         user: User,
@@ -148,10 +149,10 @@ pub fn authenticate_user(
             locked_until: row.get(12)?,
             stored_hash,
         })
-    }).map_err(|_| "User not found".to_string())?;
+    }).map_err(|_| AppError::Auth("User not found".to_string()))?;
 
     if !db_user.user.is_active {
-        return Err("Account is deactivated".to_string());
+        return Err(AppError::Auth("Account is deactivated".to_string()));
     }
 
     let now_str = crate::core::time_authority::current_timestamp_iso8601();
@@ -159,7 +160,7 @@ pub fn authenticate_user(
     // 2. Check if locked out
     if let Some(ref locked_until) = db_user.locked_until {
         if locked_until > &now_str {
-            return Err(format!("ACCOUNT_LOCKED|{}", locked_until));
+            return Err(AppError::Auth(format!("ACCOUNT_LOCKED|{}", locked_until)));
         }
     }
 
@@ -186,7 +187,7 @@ pub fn authenticate_user(
         conn.execute(
             "UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE username = ?1",
             rusqlite::params![username],
-        ).map_err(|e| format!("Database update failed: {}", e))?;
+        ).map_err(AppError::Database)?;
 
         // Append to audit log
         repository::append_audit_log(
@@ -199,7 +200,7 @@ pub fn authenticate_user(
         ).unwrap_or(());
 
         // Update ActiveUser state
-        let mut active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+        let mut active_guard = active_user_state.0.lock().map_err(|e| AppError::Lock(format!("Active user lock failed: {}", e)))?;
         *active_guard = Some(db_user.user.clone());
 
         Ok(db_user.user)
@@ -213,7 +214,7 @@ pub fn authenticate_user(
             conn.execute(
                 "UPDATE users SET failed_login_attempts = ?1, locked_until = ?2 WHERE username = ?3",
                 rusqlite::params![new_attempts, locked_until_str, username],
-            ).map_err(|e| format!("Database update failed: {}", e))?;
+            ).map_err(AppError::Database)?;
 
             // Append to audit log
             repository::append_audit_log(
@@ -225,14 +226,14 @@ pub fn authenticate_user(
                 Some("User locked out due to 5 failed attempts"),
             ).unwrap_or(());
 
-            Err(format!("ACCOUNT_LOCKED|{}", locked_until_str))
+            Err(AppError::Auth(format!("ACCOUNT_LOCKED|{}", locked_until_str)))
         } else {
             conn.execute(
                 "UPDATE users SET failed_login_attempts = ?1 WHERE username = ?2",
                 rusqlite::params![new_attempts, username],
-            ).map_err(|e| format!("Database update failed: {}", e))?;
+            ).map_err(AppError::Database)?;
 
-            Err(format!("INVALID_CREDENTIALS|{}", 5 - new_attempts))
+            Err(AppError::Auth(format!("INVALID_CREDENTIALS|{}", 5 - new_attempts)))
         }
     }
 }
@@ -242,14 +243,14 @@ pub fn reset_database(
     app: tauri::AppHandle,
     state: State<'_, DbState>,
     active_user_state: State<'_, crate::ActiveUser>,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Enforce Role-Based Access Control (RBAC) - restricted to ADMIN
     {
-        let active_guard = active_user_state.0.lock().map_err(|e| format!("Active user lock failed: {}", e))?;
+        let active_guard = active_user_state.0.lock().map_err(|e| AppError::Lock(format!("Active user lock failed: {}", e)))?;
         if let Some(ref user) = *active_guard {
             if user.role != "ADMIN" {
                 // Log unauthorized access attempt if DB is decrypted
-                let db_guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+                let db_guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
                 if let Some(conn) = db_guard.as_ref() {
                     let _ = repository::append_audit_log(
                         conn,
@@ -260,16 +261,16 @@ pub fn reset_database(
                         Some("Unauthorized attempt to reset database"),
                     );
                 }
-                return Err("UNAUTHORIZED_ACCESS".to_string());
+                return Err(AppError::Unauthorized("UNAUTHORIZED_ACCESS".to_string()));
             }
         } else {
-            return Err("UNAUTHORIZED_ACCESS".to_string());
+            return Err(AppError::Unauthorized("UNAUTHORIZED_ACCESS".to_string()));
         }
     }
 
     // 1. Lock the database connection first by setting DbState to None
     {
-        let mut guard = state.0.lock().map_err(|e| format!("Database lock failed: {}", e))?;
+        let mut guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
         *guard = None;
     }
     
@@ -278,8 +279,7 @@ pub fn reset_database(
     
     // 3. Delete database file and associated WAL/SHM files
     if db_path.exists() {
-        std::fs::remove_file(&db_path)
-            .map_err(|e| format!("Failed to delete database file: {}", e))?;
+        std::fs::remove_file(&db_path).map_err(AppError::Io)?;
     }
     let wal_path = db_path.with_extension("db-wal");
     if wal_path.exists() {
@@ -304,8 +304,8 @@ pub fn reset_database(
         "x'{}'",
         hex::encode(crate::security::key_derivation::derive_key_from_password(default_key))
     );
-    let conn = crate::data::database::open_db_with_key(&db_path, &derived_dev_key)
-        .map_err(|e| format!("Failed to initialize original database: {}", e))?;
+    let conn = crate::data::database::try_open_or_restore(&db_path, &derived_dev_key)
+        .map_err(|e| AppError::Vault(format!("Failed to initialize original database: {}", e)))?;
         
     // 6. Close the connection handle so it is closed in memory (locked)
     drop(conn);

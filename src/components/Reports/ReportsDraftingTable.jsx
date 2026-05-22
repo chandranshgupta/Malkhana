@@ -6,7 +6,7 @@ import {
   Fingerprint 
 } from 'lucide-react';
 import { Stamp } from '../shared/Stamp';
-import { getEvidenceForCertificate, generateCertificate, getEvidenceDetails } from '../../api/invoke';
+import { getEvidenceForCertificate, generateCertificate, getEvidenceDetails, getCertificate } from '../../api/invoke';
 
 export const IndCheckbox = ({ label, checked, onChange, disabled }) => (
   <label className={`flex items-center gap-3 ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer group'}`}>
@@ -93,10 +93,11 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
   const [signProgress, setSignProgress] = useState(0);
   const [isLocked, setIsLocked] = useState(false);
   const [finalHash, setFinalHash] = useState('');
+  const [complianceNote, setComplianceNote] = useState('');
 
   useEffect(() => {
     // Load evidence dropdown items on mount
-    getEvidenceForCertificate().then(list => {
+    getEvidenceForCertificate().then(async (list) => {
       setAvailableEvidence(list);
       if (initialEvidenceId) {
         const item = list.find(e => e.id === initialEvidenceId);
@@ -115,21 +116,56 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
             deviceType: mappedType
           }));
 
-          // Load details
-          getEvidenceDetails(initialEvidenceId).then(details => {
-            if (details) {
-              setData(prev => ({
-                ...prev,
-                sealNumber: details.seal_number || item.seal_number || '',
-                deviceMake: details.device_make || '',
-                deviceModel: details.device_model || '',
-                deviceColor: details.device_color || '',
-                deviceSerial: details.device_serial || '',
-                deviceImei: details.device_imei || '',
-                deviceDescription: details.description || '',
-              }));
+          try {
+            const existingCert = await getCertificate(initialEvidenceId);
+            if (existingCert) {
+              setData({
+                custodianName: existingCert.custodian_name,
+                custodianParent: existingCert.custodian_parent || '',
+                custodianAddress: existingCert.custodian_address || '',
+                designation: existingCert.designation,
+                sealNumber: existingCert.seal_number,
+                deviceType: existingCert.device_type,
+                deviceMake: '',
+                deviceModel: '',
+                deviceColor: '',
+                deviceSerial: '',
+                deviceImei: '',
+                deviceDescription: existingCert.device_description || '',
+                controlType: existingCert.control_type,
+                examinerName: existingCert.examiner_name,
+                examinerParent: existingCert.examiner_parent || '',
+                examinerAddress: existingCert.examiner_address || '',
+                labId: existingCert.lab_id,
+                hashAlg: existingCert.hash_algorithm,
+                place: 'DELHI',
+              });
+              setOriginalHash(existingCert.evidence_hash);
+              setFinalHash(existingCert.document_hash);
+              setComplianceNote(existingCert.compliance_note || '');
+              setIsLocked(true);
+            } else {
+              setIsLocked(false);
+              setFinalHash('');
+              setComplianceNote('');
+              // Load details
+              const details = await getEvidenceDetails(initialEvidenceId);
+              if (details) {
+                setData(prev => ({
+                  ...prev,
+                  sealNumber: details.seal_number || item.seal_number || '',
+                  deviceMake: details.device_make || '',
+                  deviceModel: details.device_model || '',
+                  deviceColor: details.device_color || '',
+                  deviceSerial: details.device_serial || '',
+                  deviceImei: details.device_imei || '',
+                  deviceDescription: details.description || '',
+                }));
+              }
             }
-          }).catch(console.error);
+          } catch (e) {
+            console.error("Failed to load initial certificate:", e);
+          }
         }
         if (onClearInitial) onClearInitial();
       }
@@ -180,6 +216,7 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
       };
       const cert = await generateCertificate(input);
       setFinalHash(cert.document_hash);
+      setComplianceNote(cert.compliance_note || '');
       
       // Auto-trigger print with a slight delay for the stamp-drop animation
       setTimeout(() => {
@@ -196,6 +233,8 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
     setSelectedEvidenceId(id);
     if (!id) {
       setOriginalHash('');
+      setComplianceNote('');
+      setIsLocked(false);
       return;
     }
     const item = availableEvidence.find(e => e.id === id);
@@ -212,18 +251,50 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
     }
 
     try {
-      const details = await getEvidenceDetails(id);
-      if (details) {
-        setData(prev => ({
-          ...prev,
-          sealNumber: details.seal_number || prev.sealNumber || '',
-          deviceMake: details.device_make || '',
-          deviceModel: details.device_model || '',
-          deviceColor: details.device_color || '',
-          deviceSerial: details.device_serial || '',
-          deviceImei: details.device_imei || '',
-          deviceDescription: details.description || '',
-        }));
+      const existingCert = await getCertificate(id);
+      if (existingCert) {
+        setData({
+          custodianName: existingCert.custodian_name,
+          custodianParent: existingCert.custodian_parent || '',
+          custodianAddress: existingCert.custodian_address || '',
+          designation: existingCert.designation,
+          sealNumber: existingCert.seal_number,
+          deviceType: existingCert.device_type,
+          deviceMake: '',
+          deviceModel: '',
+          deviceColor: '',
+          deviceSerial: '',
+          deviceImei: '',
+          deviceDescription: existingCert.device_description || '',
+          controlType: existingCert.control_type,
+          examinerName: existingCert.examiner_name,
+          examinerParent: existingCert.examiner_parent || '',
+          examinerAddress: existingCert.examiner_address || '',
+          labId: existingCert.lab_id,
+          hashAlg: existingCert.hash_algorithm,
+          place: 'DELHI',
+        });
+        setOriginalHash(existingCert.evidence_hash);
+        setFinalHash(existingCert.document_hash);
+        setComplianceNote(existingCert.compliance_note || '');
+        setIsLocked(true);
+      } else {
+        setIsLocked(false);
+        setFinalHash('');
+        setComplianceNote('');
+        const details = await getEvidenceDetails(id);
+        if (details) {
+          setData(prev => ({
+            ...prev,
+            sealNumber: details.seal_number || prev.sealNumber || '',
+            deviceMake: details.device_make || '',
+            deviceModel: details.device_model || '',
+            deviceColor: details.device_color || '',
+            deviceSerial: details.device_serial || '',
+            deviceImei: details.device_imei || '',
+            deviceDescription: details.description || '',
+          }));
+        }
       }
     } catch (err) {
       console.error("Failed to load evidence details:", err);
@@ -495,6 +566,14 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
 
             <p>(Hash report to be enclosed with the certificate)</p>
 
+            {/* BSA §63(2)(c) Compliance Note */}
+            <div className="mt-6 p-4 border border-black bg-slate-50 text-xs leading-relaxed font-sans select-text">
+              <div className="font-bold mb-1 uppercase tracking-wider text-black">BSA §63(2)(c) Compliance Statement:</div>
+              <div className="text-slate-800 whitespace-pre-line">
+                {isLocked ? (complianceNote || 'BSA §63(2)(c) Compliance: No system downtime or interruption events were logged during the evidence custody period.') : 'Pending document sealing. System health logs will be automatically audited for downtime during custody period.'}
+              </div>
+            </div>
+
             <div className="mt-12 flex justify-between">
               <div>
                 <p>Date (DD/MM/YYYY): <strong>{isLocked ? new Date().toLocaleDateString('en-GB') : '_____'}</strong></p>
@@ -558,6 +637,14 @@ export const ReportsDraftingTable = ({ currentUser, initialEvidenceId, onClearIn
             </div>
 
             <p>(Hash report to be enclosed with the certificate)</p>
+
+            {/* BSA §63(2)(c) Compliance Note */}
+            <div className="mt-6 p-4 border border-black bg-slate-50 text-xs leading-relaxed font-sans select-text">
+              <div className="font-bold mb-1 uppercase tracking-wider text-black">BSA §63(2)(c) Compliance Statement:</div>
+              <div className="text-slate-800 whitespace-pre-line">
+                {isLocked ? (complianceNote || 'BSA §63(2)(c) Compliance: No system downtime or interruption events were logged during the evidence custody period.') : 'Pending document sealing. System health logs will be automatically audited for downtime during custody period.'}
+              </div>
+            </div>
 
             <div className="mt-12 flex justify-between">
               <div>

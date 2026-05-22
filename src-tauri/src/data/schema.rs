@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS certificates (
     document_hash TEXT NOT NULL,              -- Cryptographic signature of the certificate content
     is_locked INTEGER DEFAULT 0,
     signed_at TEXT,
+    compliance_note TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now', '+5 hours', '+30 minutes')),
     FOREIGN KEY (evidence_id) REFERENCES evidence(id)
 );

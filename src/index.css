@@ -1,3 +1,35 @@
+@font-face {
+  font-family: 'Space Mono Fallback';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Space Mono'), url('/fonts/space-mono-normal-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono Fallback';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Space Mono'), url('/fonts/space-mono-normal-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono Fallback';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Space Mono'), url('/fonts/space-mono-italic-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono Fallback';
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: local('Space Mono'), url('/fonts/space-mono-italic-700.woff2') format('woff2');
+}
+
 :root {
   --app-font-family: 'Inter', sans-serif;
 }

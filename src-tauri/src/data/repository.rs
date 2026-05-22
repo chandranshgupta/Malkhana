@@ -157,14 +157,14 @@ pub fn insert_certificate(conn: &Connection, cert: &Certificate) -> Result<(), r
         "INSERT INTO certificates (id, evidence_id, custodian_name, custodian_parent,
             custodian_address, designation, seal_number, device_type, device_description,
             control_type, examiner_name, examiner_parent, examiner_address, lab_id,
-            hash_algorithm, evidence_hash, document_hash, is_locked, signed_at, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+            hash_algorithm, evidence_hash, document_hash, is_locked, signed_at, compliance_note, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
         params![
             cert.id, cert.evidence_id, cert.custodian_name, cert.custodian_parent,
             cert.custodian_address, cert.designation, cert.seal_number, cert.device_type,
             cert.device_description, cert.control_type, cert.examiner_name, cert.examiner_parent,
             cert.examiner_address, cert.lab_id, cert.hash_algorithm, cert.evidence_hash,
-            cert.document_hash, cert.is_locked, cert.signed_at, cert.created_at,
+            cert.document_hash, cert.is_locked, cert.signed_at, cert.compliance_note, cert.created_at,
         ],
     )?;
     Ok(())
@@ -176,7 +176,7 @@ pub fn get_certificate_by_evidence(conn: &Connection, evidence_id: &str) -> Resu
         "SELECT id, evidence_id, custodian_name, custodian_parent, custodian_address,
                 designation, seal_number, device_type, device_description, control_type,
                 examiner_name, examiner_parent, examiner_address, lab_id, hash_algorithm,
-                evidence_hash, document_hash, is_locked, signed_at, created_at
+                evidence_hash, document_hash, is_locked, signed_at, compliance_note, created_at
          FROM certificates WHERE evidence_id = ?1 ORDER BY created_at DESC LIMIT 1"
     )?;
 
@@ -201,7 +201,8 @@ pub fn get_certificate_by_evidence(conn: &Connection, evidence_id: &str) -> Resu
             document_hash: row.get(16)?,
             is_locked: row.get(17)?,
             signed_at: row.get(18)?,
-            created_at: row.get(19)?,
+            compliance_note: row.get(19)?,
+            created_at: row.get(20)?,
         })
     })?;
 

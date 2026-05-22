@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './i18n';
 import { useTranslation } from 'react-i18next';
-import { Archive, Lock, ShieldCheck, FileText, Settings, Plus, Search, ScanLine, History, CheckCircle2, LogOut } from 'lucide-react';
+import { Archive, Lock, ShieldCheck, FileText, Settings, Plus, Search, ScanLine, History, CheckCircle2, LogOut, Clock } from 'lucide-react';
 import { BlueprintBackground } from './components/shared/BlueprintBackground';
 import { EvidenceLog } from './components/EvidenceLog/EvidenceLog';
 import { ActiveCustodyBoard } from './components/ActiveCustody/ActiveCustodyBoard';
@@ -10,6 +10,7 @@ import { ReportsDraftingTable } from './components/Reports/ReportsDraftingTable'
 import { SystemSettings } from './components/SystemSettings/SystemSettings';
 import { NewIngestionWorkflow } from './components/NewIngestion/NewIngestionWorkflow';
 import { AuditTrail } from './components/Audit/AuditTrail';
+import { SessionLogs } from './components/Audit/SessionLogs';
 import { FormCC1PrintSheet } from './components/Reports/FormCC1PrintSheet';
 import { 
   isVaultInitialized, 
@@ -17,13 +18,13 @@ import {
   unlockVault, 
   lockVault, 
   getAllUsers, 
-  authenticateUser, 
   getSettings,
   authenticateSession,
   closeSession,
   reauthSession,
   isPinVaultEnabled,
-  tryPinUnlock
+  tryPinUnlock,
+  updateOfficerLanguage
 } from './api/invoke';
 
 function VaultPinUnlockScreen({ onUnlockSuccess, onFallback }) {
@@ -737,6 +738,9 @@ export default function App() {
     setSessionId(response.session_id);
     setCurrentUser(response.user);
     setIsLoggedIn(true);
+    if (response.preferred_language) {
+      i18n.changeLanguage(response.preferred_language);
+    }
   };
 
   const handleLogout = async () => {
@@ -840,6 +844,9 @@ export default function App() {
           <button onClick={() => setViewSafe('AUDIT_TRAIL')} className={`w-full flex items-center justify-center lg:justify-start gap-3 px-2 lg:px-4 py-3 font-bold text-sm transition-all border ${currentView === 'AUDIT_TRAIL' ? 'bg-[#e2e8f0] border-slate-400 text-slate-800 shadow-[2px_2px_0px_rgba(100,116,139,0.2)]' : 'border-transparent text-slate-600 hover:bg-slate-200/50'}`}>
             <History size={16} /> <span className="hidden lg:inline">{t('AUDIT_TRAIL')}</span>
           </button>
+          <button onClick={() => setViewSafe('SESSION_LOGS')} className={`w-full flex items-center justify-center lg:justify-start gap-3 px-2 lg:px-4 py-3 font-bold text-sm transition-all border ${currentView === 'SESSION_LOGS' ? 'bg-[#e2e8f0] border-slate-400 text-slate-800 shadow-[2px_2px_0px_rgba(100,116,139,0.2)]' : 'border-transparent text-slate-600 hover:bg-slate-200/50'}`}>
+            <Clock size={16} /> <span className="hidden lg:inline">{t('SESSION_LOGS', 'Session History')}</span>
+          </button>
           {currentUser?.role === 'ADMIN' && (
             <button onClick={() => setViewSafe('SYSTEM_SETTINGS')} className={`w-full flex items-center justify-center lg:justify-start gap-3 px-2 lg:px-4 py-3 font-bold text-sm transition-all border ${currentView === 'SYSTEM_SETTINGS' ? 'bg-[#e2e8f0] border-slate-400 text-slate-800 shadow-[2px_2px_0px_rgba(100,116,139,0.2)]' : 'border-transparent text-slate-600 hover:bg-slate-200/50'} mt-4`}>
               <Settings size={16} /> <span className="hidden lg:inline">{t('SYSTEM_SETTINGS')}</span>
@@ -869,6 +876,9 @@ export default function App() {
                 onClick={() => {
                   i18n.changeLanguage('en');
                   setShowLangDropdown(false);
+                  if (isLoggedIn && currentUser?.username) {
+                    updateOfficerLanguage(currentUser.username, 'en').catch(console.error);
+                  }
                 }}
                 className={`px-3 py-1.5 font-bold transition-colors ${i18n.language === 'en' ? 'bg-slate-200 text-slate-800' : 'text-slate-600 hover:bg-slate-100'}`}
               >
@@ -890,6 +900,9 @@ export default function App() {
                         onClick={() => {
                           i18n.changeLanguage(lang.code);
                           setShowLangDropdown(false);
+                          if (isLoggedIn && currentUser?.username) {
+                            updateOfficerLanguage(currentUser.username, lang.code).catch(console.error);
+                          }
                         }}
                         className={`w-full text-left px-4 py-2 text-xs font-bold hover:bg-slate-100 transition-colors border-b border-slate-100 last:border-b-0 ${i18n.language === lang.code ? 'bg-slate-100 text-slate-900' : 'text-slate-700'}`}
                       >
@@ -945,6 +958,13 @@ export default function App() {
         {currentView === 'SYSTEM_SETTINGS' && <SystemSettings currentUser={currentUser} />}
         {currentView === 'NEW_INGESTION' && <NewIngestionWorkflow setCurrentView={setViewSafe} currentUser={currentUser} />}
         {currentView === 'AUDIT_TRAIL' && <AuditTrail onBack={() => setViewSafe('EVIDENCE_LOG')} />}
+        {currentView === 'SESSION_LOGS' && (
+          <SessionLogs 
+            sessionId={sessionId} 
+            currentUser={currentUser} 
+            onRefreshSessionState={checkVaultState} 
+          />
+        )}
         {currentView === 'PRINT_CC1' && <FormCC1PrintSheet evidenceId={printEvidenceId} onBack={() => setViewSafe('SEALED_ARCHIVE')} />}
 
         {/* Bottom Metrics (Hidden on complex views to maximize space) */}

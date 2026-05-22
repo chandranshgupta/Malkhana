@@ -129,7 +129,7 @@ export const FormCC1PrintSheet = ({ evidenceId, onBack }) => {
                 signer_public_key: verification.signer_public_key
               });
             }
-          } catch (e) {
+          } catch {
             // device_description was not JSON, ignore
           }
         }

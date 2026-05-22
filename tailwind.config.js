@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        mono: ['Space Mono', 'monospace'],
+        mono: ['Space Mono', 'Space Mono Fallback', 'monospace'],
       },
     },
   },

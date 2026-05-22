@@ -378,3 +378,39 @@ export const disposeEvidence = async (evidenceId, dispositionType, magistrateOrd
   }
 };
 
+export const updateOfficerLanguage = async (batchNo, lang) => {
+  try {
+    return await invoke('update_officer_language', { batchNo, lang });
+  } catch (error) {
+    console.error('Failed to update officer language:', error);
+    throw error;
+  }
+};
+
+export const getAllSessions = async () => {
+  try {
+    return await invoke('get_all_sessions');
+  } catch (error) {
+    console.error('Failed to get all sessions:', error);
+    throw error;
+  }
+};
+
+export const getSessionEvents = async (sessionId) => {
+  try {
+    return await invoke('get_session_events', { sessionId });
+  } catch (error) {
+    console.error('Failed to get session events:', error);
+    throw error;
+  }
+};
+
+export const getSessionCosigners = async (sessionId) => {
+  try {
+    return await invoke('get_session_cosigners', { sessionId });
+  } catch (error) {
+    console.error('Failed to get session cosigners:', error);
+    throw error;
+  }
+};
+
