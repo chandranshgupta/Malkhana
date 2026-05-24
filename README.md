@@ -234,7 +234,43 @@ sequenceDiagram
     APP-->>FSL: PDF ready for court submission
 ```
 
-## 5. Documentation & Marketing Index
+## 5. User Personas & Operational Roles
+
+Malkhana Vault separates database actions and views using Role-Based Access Control (RBAC) designed around four key law enforcement roles:
+- **Investigating Officer (IO):** Initiates cases, logs new seizures, runs crime-scene hash triage, captures Panch witness details, and generates Form CC-1.
+- **Malkhana In-Charge:** Oversees physical evidence intake, maps devices to the 150-drawer matrix grid, and executes the H2 Receipt Hash integrity check.
+- **Forensic Examiner (FSL Expert):** Generates bit-stream images, runs post-extraction H3 hashes, audits the chain, and signs the Section 63 Admissibility Certificate.
+- **Court Records Clerk:** Verifies the cryptographic chain and validates exported digital signatures before presenting evidence to the magistrate.
+
+---
+
+## 6. National Cyber Forensic Protocol Alignment
+
+The application matches the step-by-step custody lifecycle defined in the **National Cyber Forensic Protocol**:
+1. **Crime Scene Ingestion:** IO generates the **H1 Birth Hash** immediately at the scene. Panch witness details and write-blocker usage are recorded.
+2. **Sealed Storage Handoff:** Malkhana In-Charge assigns physical coordinates (matrix grid) and verifies the **H2 Receipt Hash** ($H_1 == H_2$) to detect any "Malkhana Gap" during transport.
+3. **Laboratory Forensic Imaging:** FSL Examiner re-verifies the H2 hash, writes a bit-stream forensic image copy, generates the **H3 Analysis Hash**, and verifies that $H_2 == H_3$ to prove zero alteration by the analyst.
+4. **Admissibility Certification:** The FSL Expert exports the cryptographically-sealed **BSA Section 63 Admissibility Certificate** containing the full audit history.
+
+---
+
+## 7. Security & Database Architecture
+
+### Cryptographic Ledger (SQLCipher Schema)
+To ensure court-admissibility, all transaction schemas are cryptographically linked in an encrypted, append-only SQLite DB:
+- **`officer_profiles` & `sessions`:** Auth is treated as a custody event (Step 0). Captures system fingerprints (MAC, IP, Hostname) and biometrics.
+- **`cases` & `evidence`:** Maps digital evidence parameters, status (ACTIVE, SEALED, DISPOSED), and H1/H2/H3 hash values.
+- **`audit_log`:** Encoded as a chronological Merkle Tree log. Any attempt to modify a past row invalidates the Merkle Root, rendering database tampering immediately obvious.
+- **`system_health_log`:** Captures system lifecycle events (`STARTUP`, `SHUTDOWN`, `POWER_LOSS`, `CRASH`) for automated compliance with **BSA Section 63(2)(c)**.
+
+### Power Loss & Offline Resilience
+- **SQLite WAL Mode:** Police stations in rural regions experience frequent load-shedding. The database operates in **Write-Ahead Logging (WAL) mode**. Transactions are committed to a log file first, ensuring zero database corruption if the computer drops power mid-write.
+- **PBKDF2 Key Derivation:** Master database encryption keys are derived using **256,000 PBKDF2 iterations** with SHA-256, defending against offline brute-force attacks.
+- **Multilingual Vernacular Support:** Full localization for all **22 scheduled languages of India** (treated equally without hierarchy) ensures clear UI operation in regional languages.
+
+---
+
+## 8. Documentation & Marketing Index
 
 To keep this product repository clean, modular, and lightweight, all marketing materials, walkthrough media, and compiled PDFs have been separated to the repository's `gh-pages` branch and are served directly via GitHub Pages:
 
@@ -247,4 +283,5 @@ To keep this product repository clean, modular, and lightweight, all marketing m
 *   **[Triple-Hash Verification Protocol (PDF)](https://chandranshgupta.github.io/Malkhana/triple-hash.pdf)**
 *   **[Hardware & Offline Fallback FAQ (PDF)](https://chandranshgupta.github.io/Malkhana/hardware-faq.pdf)**
 *   **[Compilation & Developer Onboarding Guide (PDF)](https://chandranshgupta.github.io/Malkhana/contributing.pdf)**
+
 

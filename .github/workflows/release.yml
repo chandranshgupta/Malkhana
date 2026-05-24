@@ -42,6 +42,7 @@ jobs:
 
       - name: Set OpenSSL path (Windows only)
         if: matrix.platform == 'windows-latest'
+        shell: bash
         run: echo "OPENSSL_DIR=C:\Program Files\OpenSSL" >> $GITHUB_ENV
 
       - name: Install Frontend Dependencies
