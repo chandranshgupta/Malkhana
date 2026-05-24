@@ -234,14 +234,16 @@ sequenceDiagram
     APP-->>FSL: PDF ready for court submission
 ```
 
----
+## 5. Documentation & Marketing Index
 
-## 5. Directory Mapping & Documentation Index
+To keep this product repository clean, modular, and lightweight, all marketing materials, walkthrough media, and compiled PDFs have been separated to the repository's `gh-pages` branch and are served directly via GitHub Pages:
 
-All primary documentation resides in the `docs/` folder to ensure this README remains high-level and scannable:
+*   **[Live Project Homepage & Demo Walkthrough](https://chandranshgupta.github.io/Malkhana/)**
+*   **[Printable Product Brief (PDF)](https://chandranshgupta.github.io/Malkhana/collateral/product-brief.pdf)**
+*   **[Cryptographic Architecture Whitepaper (PDF)](https://chandranshgupta.github.io/Malkhana/collateral/cryptographic-whitepaper.pdf)**
+*   **[Sandbox Evaluation & Credentials Manual (PDF)](https://chandranshgupta.github.io/Malkhana/evaluation.pdf)**
+*   **[Step 0 Login Custody Explainer (PDF)](https://chandranshgupta.github.io/Malkhana/session-custody.pdf)**
+*   **[Triple-Hash Verification Protocol (PDF)](https://chandranshgupta.github.io/Malkhana/triple-hash.pdf)**
+*   **[Hardware & Offline Fallback FAQ (PDF)](https://chandranshgupta.github.io/Malkhana/hardware-faq.pdf)**
+*   **[Compilation & Developer Onboarding Guide (PDF)](https://chandranshgupta.github.io/Malkhana/contributing.pdf)**
 
-- **[Sandbox Evaluation Guide](file:///d:/Carrer/Projects/Malkhana/docs/evaluation.md):** Pre-seeded credentials (batch numbers, passwords, PINs) and walking through a trial ingestion.
-- **[Step 0 Login Custody Explainer](file:///d:/Carrer/Projects/Malkhana/docs/session-custody.md):** Background on lawful control, fingerprinting, and session seals under BSA §63(2).
-- **[Triple-Hash Verification details](file:///d:/Carrer/Projects/Malkhana/docs/triple-hash.md):** Detailed breakdown of H1, H2, H3 validation and handling forensic mismatches.
-- **[Hardware & Offline Fallback FAQ](file:///d:/Carrer/Projects/Malkhana/docs/hardware-faq.md):** Operational guidelines for rural stations lacking cameras, mics, or persistent internet.
-- **[Compilation & Contributing Guide](file:///d:/Carrer/Projects/Malkhana/docs/contributing.md):** Compilation steps for Node.js/Rust build chains and statically bundling SQLCipher.

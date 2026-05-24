@@ -35,3 +35,11 @@ skills_reference.txt
 scratch_slots_debug.txt
 original_prompt.txt
 src-tauri/build_err.txt
+
+# Marketing and Docs backups/separations
+_backup_marketing_and_docs/
+docs/
+*.mp4
+*.pptx
+generate_pdfs.py
+generate_pitch_deck.py
