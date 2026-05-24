@@ -967,31 +967,6 @@ export default function App() {
         )}
         {currentView === 'PRINT_CC1' && <FormCC1PrintSheet evidenceId={printEvidenceId} onBack={() => setViewSafe('SEALED_ARCHIVE')} />}
 
-        {/* Bottom Metrics (Hidden on complex views to maximize space) */}
-        {['EVIDENCE_LOG', 'ACTIVE_CUSTODY', 'SEALED_ARCHIVE'].includes(currentView) && (
-          <div className="border-t border-slate-400 p-6 bg-[#f4f7f9] z-20 relative flex justify-between gap-4 mt-auto flex-shrink-0">
-            <div className="flex-1 border border-slate-400 bg-white/50 p-4 relative shadow-[2px_2px_0px_rgba(100,116,139,0.1)]">
-               <div className="absolute top-1 left-1 w-2 h-2 border-t border-l border-slate-400"></div>
-               <div className="text-[10px] font-bold text-slate-500 mb-1">STORAGE_UTILIZATION</div>
-               <div className="text-3xl font-light">74.2 <span className="text-sm font-bold">TB</span></div>
-               <div className="w-full bg-slate-200 h-1 mt-2"><div className="bg-slate-700 h-1 w-[74%]"></div></div>
-            </div>
-            <div className="flex-1 border border-slate-400 bg-white/50 p-4 relative shadow-[2px_2px_0px_rgba(100,116,139,0.1)]">
-               <div className="absolute top-1 right-1 w-2 h-2 border-t border-r border-slate-400"></div>
-               <div className="text-[10px] font-bold text-slate-500 mb-1">ACTIVE_CUSTODY_ITEMS</div>
-               <div className="text-3xl font-light">1,204</div>
-            </div>
-            <div className="flex-1 border border-slate-400 bg-white/50 p-4 relative shadow-[2px_2px_0px_rgba(100,116,139,0.1)]">
-               <div className="text-[10px] font-bold text-slate-500 mb-1">SEALED_ARCHIVE_COUNT</div>
-               <div className="text-3xl font-light">18,592</div>
-            </div>
-            <div className="flex-1 border border-slate-400 bg-white/50 p-4 relative shadow-[2px_2px_0px_rgba(100,116,139,0.1)]">
-               <div className="absolute bottom-1 right-1 w-2 h-2 border-b border-r border-slate-400"></div>
-               <div className="text-[10px] font-bold text-slate-500 mb-1">SYSTEM_HEALTH_INDEX</div>
-               <div className="text-3xl font-light flex items-center gap-2">0.99 <CheckCircle2 size={24} className="text-slate-500" strokeWidth={1.5} /></div>
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );

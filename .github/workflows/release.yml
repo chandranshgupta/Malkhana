@@ -17,9 +17,9 @@ jobs:
       matrix:
         include:
           - platform: 'ubuntu-22.04' # Compiles .deb, .AppImage, and .rpm
-            args: ''
+            args: '--bundles deb,appimage,rpm'
           - platform: 'windows-latest' # Compiles .msi and .exe (NSIS)
-            args: ''
+            args: '--bundles nsis,msi'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -37,25 +37,45 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
           sudo apt-get install -y rpm
 
-      - name: Set OpenSSL path (Windows only)
+      - name: Install Windows Dependencies (Windows only)
         if: matrix.platform == 'windows-latest'
+        shell: pwsh
         run: |
-          if (Test-Path "C:\Program Files\OpenSSL-Win64") {
-            echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
-          } elseif (Test-Path "C:\Program Files\OpenSSL") {
-            echo "OPENSSL_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
-          } else {
-            echo "Warning: OpenSSL directory not found"
+          choco install nsis wixtoolset openssl -y --no-progress
+
+          $opensslRoot = @(
+            "C:\Program Files\OpenSSL-Win64",
+            "C:\Program Files\OpenSSL"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $opensslRoot) {
+            throw "OpenSSL directory not found after Chocolatey install"
           }
+
+          $opensslLibDir = @(
+            "$opensslRoot\lib\VC\x64\MD",
+            "$opensslRoot\lib",
+            "$opensslRoot\lib64"
+          ) | Where-Object { Test-Path (Join-Path $_ "libcrypto.lib") } | Select-Object -First 1
+
+          if (-not $opensslLibDir) {
+            Get-ChildItem -Path $opensslRoot -Recurse -Filter "libcrypto.lib" | ForEach-Object { $_.FullName }
+            throw "libcrypto.lib not found under $opensslRoot"
+          }
+
+          "OPENSSL_DIR=$opensslRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "OPENSSL_LIB_DIR=$opensslLibDir" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "OPENSSL_INCLUDE_DIR=$opensslRoot\include" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "$opensslRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Install Frontend Dependencies
         run: npm ci
 
       - name: Build and Publish Tauri App
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
