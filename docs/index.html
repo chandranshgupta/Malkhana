@@ -181,11 +181,27 @@
   <div class="nav-links">
     <a href="#compliance">Compliance</a>
     <a href="#architecture">Architecture</a>
-    <a href="#tiers">Licensing</a>
+    <a href="#tiers" style="display:none">Licensing</a>
     <a href="#download">Download</a>
     <a href="#docs">Docs</a>
   </div>
-  <span class="nav-badge">Stable · v0.1.0</span>
+  <div style="display:flex;align-items:center;gap:1.5rem">
+    <div style="display:flex;align-items:center;gap:12px">
+      <!-- GitHub Monochrome Icon -->
+      <a href="https://github.com/chandranshgupta/" target="_blank" title="GitHub" style="color:rgba(255,255,255,0.6);text-decoration:none;display:flex;align-items:center;transition:color 0.15s;font-size:14px" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='rgba(255,255,255,0.6)'">
+        <svg height="14" width="14" viewBox="0 0 16 16" fill="currentColor" style="display:inline-block;vertical-align:middle"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+      </a>
+      <!-- LinkedIn Monochrome Icon -->
+      <a href="https://www.linkedin.com/in/chandransh-gupta/" target="_blank" title="LinkedIn" style="color:rgba(255,255,255,0.6);text-decoration:none;display:flex;align-items:center;transition:color 0.15s;font-size:14px" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='rgba(255,255,255,0.6)'">
+        <svg height="14" width="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline-block;vertical-align:middle"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.779-1.75-1.75s.784-1.75 1.75-1.75 1.75.779 1.75 1.75-.784 1.75-1.75 1.75zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"></path></svg>
+      </a>
+      <!-- Portfolio Globe Monochrome Icon -->
+      <a href="https://chandranshgupta.vercel.app/" target="_blank" title="Portfolio" style="color:rgba(255,255,255,0.6);text-decoration:none;display:flex;align-items:center;transition:color 0.15s;font-size:14px" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='rgba(255,255,255,0.6)'">
+        <svg height="14" width="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+      </a>
+    </div>
+    <span class="nav-badge">Stable · v0.1.0</span>
+  </div>
 </nav>
 
 <div class="bp-bg">
@@ -205,7 +221,7 @@
           <span class="badge badge-blue">AES-256 SQLCipher</span>
         </div>
         <div class="hero-actions">
-          <a href="#download" class="btn-primary" style="text-decoration:none">↓ Download AppImage</a>
+          <a href="#download" class="btn-primary" style="text-decoration:none">Download Early Release(Preview)</a>
           <a href="#docs" class="btn-secondary" style="text-decoration:none">Read the Docs</a>
         </div>
       </div>
@@ -328,6 +344,26 @@
       <div class="arch-cell-value">22 Indian Languages</div>
       <div class="arch-cell-sub">All scheduled languages treated equally via i18next. RTL support for Urdu, Sindhi, Kashmiri. No language hierarchy.</div>
     </div>
+    <div class="arch-cell" style="background:var(--paper2);opacity:0.6;border:1px dashed var(--paper3)">
+      <div class="arch-cell-label">Roadmap</div>
+      <div class="arch-cell-value">More to come</div>
+      <div class="arch-cell-sub">Hardware HSM integration. Under development.</div>
+    </div>
+    <div class="arch-cell" style="background:var(--paper2);opacity:0.6;border:1px dashed var(--paper3)">
+      <div class="arch-cell-label">Roadmap</div>
+      <div class="arch-cell-value">More to come</div>
+      <div class="arch-cell-sub">Live biometric scanner SDKs. Under development.</div>
+    </div>
+    <div class="arch-cell" style="background:var(--paper2);opacity:0.6;border:1px dashed var(--paper3)">
+      <div class="arch-cell-label">Roadmap</div>
+      <div class="arch-cell-value">More to come</div>
+      <div class="arch-cell-sub">Mobile evidence intake client. Under development.</div>
+    </div>
+    <div class="arch-cell" style="background:var(--paper2);opacity:0.6;border:1px dashed var(--paper3)">
+      <div class="arch-cell-label">Roadmap</div>
+      <div class="arch-cell-value">More to come</div>
+      <div class="arch-cell-sub">District-wide sync dashboard. Under development.</div>
+    </div>
   </div>
 
   <div style="margin-top:2.5rem">
@@ -362,7 +398,7 @@
 </div>
 </section>
 
-<section id="tiers" style="background:white;border-top:1px solid var(--paper3);border-bottom:1px solid var(--paper3)">
+<section id="tiers" style="display:none;background:white;border-top:1px solid var(--paper3);border-bottom:1px solid var(--paper3)">
 <div class="section">
   <div class="section-label">Licensing</div>
   <div class="section-title">Open core. Government-ready.</div>
@@ -434,10 +470,10 @@
     All packages are self-contained. No internet connection required post-install. SQLCipher is statically compiled into the binary.
   </p>
   <div class="download-row">
-    <button class="dl-btn">MalkhanaVault <span class="ext">.AppImage</span></button>
-    <button class="dl-btn">MalkhanaVault <span class="ext">.deb</span></button>
-    <button class="dl-btn">MalkhanaVault <span class="ext">.rpm</span></button>
-    <button class="dl-btn" style="opacity:0.5;cursor:default">Windows <span class="ext">.exe (coming)</span></button>
+    <a href="https://github.com/chandranshgupta/Malkhana/releases/latest" target="_blank" class="dl-btn" style="text-decoration:none">MalkhanaVault <span class="ext">.AppImage</span></a>
+    <a href="https://github.com/chandranshgupta/Malkhana/releases/latest" target="_blank" class="dl-btn" style="text-decoration:none">MalkhanaVault <span class="ext">.deb</span></a>
+    <a href="https://github.com/chandranshgupta/Malkhana/releases/latest" target="_blank" class="dl-btn" style="text-decoration:none">MalkhanaVault <span class="ext">.rpm</span></a>
+    <a href="https://github.com/chandranshgupta/Malkhana/releases/latest" target="_blank" class="dl-btn" style="text-decoration:none">Windows <span class="ext">.exe</span></a>
   </div>
   <p style="font-size:11px;color:var(--ink3);font-family:var(--mono);margin-top:0.5rem">
     Build requirements: Rust stable · Node.js v18+ · C++ build tools (for SQLCipher) · <code>npm run tauri build</code>
@@ -453,42 +489,71 @@
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-top:1.5rem">
     <div class="card">
       <div style="font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:0.15em;margin-bottom:8px">GUIDE 01</div>
-      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./session-custody.md" style="color:inherit;text-decoration:none hover:underline">Session-as-Chain-of-Custody</a></div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./session-custody.pdf" target="_blank" style="color:inherit;text-decoration:none hover:underline">Session-as-Chain-of-Custody</a></div>
       <div style="font-size:12px;color:var(--ink2);line-height:1.6">Login is Step 0 of the forensic chain. Every session is a sealed, system-fingerprinted custody event compliant with BSA §63(2).</div>
     </div>
     <div class="card">
       <div style="font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:0.15em;margin-bottom:8px">GUIDE 02</div>
-      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./triple-hash.md" style="color:inherit;text-decoration:none hover:underline">Triple-Hash Protocol</a></div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./triple-hash.pdf" target="_blank" style="color:inherit;text-decoration:none hover:underline">Triple-Hash Protocol</a></div>
       <div style="font-size:12px;color:var(--ink2);line-height:1.6">Mathematical proof of the H₁→H₂→H₃ verification chain. How it eliminates court-challenged Malkhana Gaps.</div>
     </div>
     <div class="card">
       <div style="font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:0.15em;margin-bottom:8px">GUIDE 03</div>
-      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./evaluation.md" style="color:inherit;text-decoration:none hover:underline">Lab Examiner Walkthrough</a></div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./evaluation.pdf" target="_blank" style="color:inherit;text-decoration:none hover:underline">Lab Examiner Walkthrough</a></div>
       <div style="font-size:12px;color:var(--ink2);line-height:1.6">Step-by-step evaluation guide for FSL examiners and station managers. Covers ingestion, verification, and certificate export.</div>
     </div>
     <div class="card">
       <div style="font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:0.15em;margin-bottom:8px">GUIDE 04</div>
-      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./hardware-faq.md" style="color:inherit;text-decoration:none hover:underline">Hardware Fallback FAQ</a></div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./hardware-faq.pdf" target="_blank" style="color:inherit;text-decoration:none hover:underline">Hardware Fallback FAQ</a></div>
       <div style="font-size:12px;color:var(--ink2);line-height:1.6">Operational guide for rural stations where cameras, microphones, or external peripherals are unavailable.</div>
     </div>
     <div class="card">
       <div style="font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:0.15em;margin-bottom:8px">GUIDE 05</div>
-      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./collateral/cryptographic-whitepaper.md" style="color:inherit;text-decoration:none hover:underline">Cryptographic White Paper</a></div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./collateral/cryptographic-whitepaper.pdf" target="_blank" style="color:inherit;text-decoration:none hover:underline">Cryptographic White Paper</a></div>
       <div style="font-size:12px;color:var(--ink2);line-height:1.6">SQLCipher AES-256, PBKDF2 key derivation, Merkle audit log framework, and BSA §63(2)(c) downtime disclosure mechanics.</div>
     </div>
     <div class="card">
       <div style="font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:0.15em;margin-bottom:8px">GUIDE 06</div>
-      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./contributing.md" style="color:inherit;text-decoration:none hover:underline">Developer Onboarding</a></div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:8px"><a href="./contributing.pdf" target="_blank" style="color:inherit;text-decoration:none hover:underline">Developer Onboarding</a></div>
       <div style="font-size:12px;color:var(--ink2);line-height:1.6">Setup guide for contributors: Rust + Node.js + SQLCipher build deps. Key files, IPC bridge, and architecture overview.</div>
     </div>
   </div>
 </div>
 </section>
 
-<footer>
-  <div class="footer-inner">
-    <div class="footer-left">
-      ...
+<footer style="background:var(--ink);border-top:2px solid var(--accent);padding:3rem 2rem;color:white">
+  <div class="footer-inner" style="max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:2rem">
+    <div style="flex:1;min-width:300px">
+      <div style="font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:1rem;color:white">
+        Malkhana <span style="color:var(--accent)">Vault</span>
+      </div>
+      <p style="font-size:13px;color:#94a3b8;line-height:1.6;max-width:400px;margin-bottom:1.5rem">
+        An offline-first, cryptographic digital custody application built to align physical evidence rooms with the Bharatiya Sakshya Adhiniyam (BSA), 2023.
+      </p>
+      <div style="font-family:var(--mono);font-size:11px;color:#64748b">
+        &copy; 2026 Chandransh Gupta. All rights reserved.
+      </div>
+    </div>
+    
+    <div style="min-width:250px">
+      <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent);margin-bottom:1rem;font-weight:700">
+        Drafted & Engineered By
+      </div>
+      <div class="card" style="background:#1e293b;border-color:#334155;padding:1rem;color:white;margin-bottom:1rem">
+        <div style="font-family:var(--mono);font-size:14px;font-weight:700;margin-bottom:4px">Chandransh Gupta</div>
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:12px">Software Engineer & Forensics Lead</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-family:var(--mono);font-size:11px">
+          <a href="https://github.com/chandranshgupta/" target="_blank" style="color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:6px">
+            <span style="font-size:12px">&bull;</span> GitHub/chandranshgupta
+          </a>
+          <a href="https://www.linkedin.com/in/chandransh-gupta/" target="_blank" style="color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:6px">
+            <span style="font-size:12px">&bull;</span> LinkedIn/chandransh-gupta
+          </a>
+          <a href="https://chandranshgupta.vercel.app/" target="_blank" style="color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:6px">
+            <span style="font-size:12px">&bull;</span> Portfolio/chandranshgupta.vercel.app
+          </a>
+        </div>
+      </div>
     </div>
   </div>
 </footer>
