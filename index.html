@@ -213,6 +213,18 @@
       from { opacity: 0; transform: translateY(4px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    .wf-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:2rem;
+      align-items:center;
+    }
+    @media(max-width:768px){
+      .wf-grid{
+        grid-template-columns:1fr;
+        gap:1.5rem;
+      }
+    }
   </style>
 </head>
 <body>
@@ -316,7 +328,7 @@
     <div class="card" style="padding:2rem;min-height:280px;background:white">
       <!-- Tab 1 content -->
       <div id="wf-content-1" class="wf-content active">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:center">
+        <div class="wf-grid">
           <div>
             <h3 style="font-family:var(--mono);font-size:15px;font-weight:bold;color:var(--ink);margin-bottom:1rem;text-transform:uppercase;letter-spacing:0.05em">01. SECURE crime scene INGESTION</h3>
             <p style="font-size:13px;line-height:1.6;color:var(--ink2);margin-bottom:1rem">
@@ -340,7 +352,7 @@
       
       <!-- Tab 2 content -->
       <div id="wf-content-2" class="wf-content">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:center">
+        <div class="wf-grid">
           <div>
             <h3 style="font-family:var(--mono);font-size:15px;font-weight:bold;color:var(--ink);margin-bottom:1rem;text-transform:uppercase;letter-spacing:0.05em">02. TRIPLE-HASH PROTOCOL GENERATION</h3>
             <p style="font-size:13px;line-height:1.6;color:var(--ink2);margin-bottom:1rem">
@@ -365,7 +377,7 @@
       
       <!-- Tab 3 content -->
       <div id="wf-content-3" class="wf-content">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:center">
+        <div class="wf-grid">
           <div>
             <h3 style="font-family:var(--mono);font-size:15px;font-weight:bold;color:var(--ink);margin-bottom:1rem;text-transform:uppercase;letter-spacing:0.05em">03. SECURE VAULT MATRIX ARCHIVING</h3>
             <p style="font-size:13px;line-height:1.6;color:var(--ink2);margin-bottom:1rem">
@@ -398,7 +410,7 @@
       
       <!-- Tab 4 content -->
       <div id="wf-content-4" class="wf-content">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:center">
+        <div class="wf-grid">
           <div>
             <h3 style="font-family:var(--mono);font-size:15px;font-weight:bold;color:var(--ink);margin-bottom:1rem;text-transform:uppercase;letter-spacing:0.05em">04. BSA SECTION 63 LEGAL CERTIFICATION</h3>
             <p style="font-size:13px;line-height:1.6;color:var(--ink2);margin-bottom:1rem">
