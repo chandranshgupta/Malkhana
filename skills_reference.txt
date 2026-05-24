@@ -1,0 +1,5 @@
+# Antigravity Agent Skills Reference
+The agent skills catalog and configuration can be found at the following path:
+C:\Users\Asus\.gemini\skills
+
+This includes the CATALOG.md and skills_index.json which contain 1,400+ agent skills.
