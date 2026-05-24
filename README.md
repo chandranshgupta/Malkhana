@@ -1,8 +1,20 @@
+<table border="0" cellspacing="0" cellpadding="0">
+<tr>
+<td width="65%" valign="top">
+
 # MALKHANA VAULT — DIGITAL EVIDENCE CUSTODIAN
 
 > **Malkhana Vault** is an offline-first, forensic-grade digital evidence management system built for Indian law enforcement. It transforms physical Malkhana (police property room) logbooks into a cryptographically secured local desktop application — establishing a court-admissible chain of custody under the **Bharatiya Sakshya Adhiniyam (BSA), 2023** and **Bharatiya Nagarik Suraksha Sanhita (BNSS), 2023**.
 >
 > Every login opens a legally-bound custody session. Every evidence entry is anchored to a birth hash. Every handoff is triple-verified. The system produces a signed BSA Section 63 Admissibility Certificate exportable directly to court.
+
+
+</td>
+<td width="35%" valign="middle" align="center">
+  <img src="assets/Logo.gif" alt="Malkhana Vault" width="240" />
+</td>
+</tr>
+</table>
 
 ---
 
