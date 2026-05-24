@@ -43,3 +43,4 @@ docs/
 *.pptx
 generate_pdfs.py
 generate_pitch_deck.py
+.agents/

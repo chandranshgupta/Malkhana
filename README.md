@@ -241,6 +241,7 @@ To keep this product repository clean, modular, and lightweight, all marketing m
 *   **[Live Project Homepage & Demo Walkthrough](https://chandranshgupta.github.io/Malkhana/)**
 *   **[Printable Product Brief (PDF)](https://chandranshgupta.github.io/Malkhana/collateral/product-brief.pdf)**
 *   **[Cryptographic Architecture Whitepaper (PDF)](https://chandranshgupta.github.io/Malkhana/collateral/cryptographic-whitepaper.pdf)**
+*   **[Forensic & Legal Compliance Report (PDF)](https://chandranshgupta.github.io/Malkhana/compliance-report.pdf)**
 *   **[Sandbox Evaluation & Credentials Manual (PDF)](https://chandranshgupta.github.io/Malkhana/evaluation.pdf)**
 *   **[Step 0 Login Custody Explainer (PDF)](https://chandranshgupta.github.io/Malkhana/session-custody.pdf)**
 *   **[Triple-Hash Verification Protocol (PDF)](https://chandranshgupta.github.io/Malkhana/triple-hash.pdf)**
