@@ -42,8 +42,14 @@ jobs:
 
       - name: Set OpenSSL path (Windows only)
         if: matrix.platform == 'windows-latest'
-        shell: bash
-        run: echo "OPENSSL_DIR=C:\Program Files\OpenSSL" >> $GITHUB_ENV
+        run: |
+          if (Test-Path "C:\Program Files\OpenSSL-Win64") {
+            echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
+          } elseif (Test-Path "C:\Program Files\OpenSSL") {
+            echo "OPENSSL_DIR=C:\Program Files\OpenSSL" >> $env:GITHUB_ENV
+          } else {
+            echo "Warning: OpenSSL directory not found"
+          }
 
       - name: Install Frontend Dependencies
         run: npm ci

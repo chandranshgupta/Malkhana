@@ -268,9 +268,45 @@ To ensure court-admissibility, all transaction schemas are cryptographically lin
 - **PBKDF2 Key Derivation:** Master database encryption keys are derived using **256,000 PBKDF2 iterations** with SHA-256, defending against offline brute-force attacks.
 - **Multilingual Vernacular Support:** Full localization for all **22 scheduled languages of India** (treated equally without hierarchy) ensures clear UI operation in regional languages.
 
+## 8. Sandbox & Demo Credentials
+
+For testing and evaluation in the sandbox environment, use the following pre-seeded credentials:
+- **Officer ID / Batch Number:** `op_092`
+- **PIN:** `092092`
+- **Password:** `092092`
+- **Role:** Administrator / Investigating Officer
+
 ---
 
-## 8. Documentation & Marketing Index
+## 9. Developer Onboarding & Local Build
+
+### Prerequisites
+To compile and run Malkhana Vault locally, ensure you have the following installed:
+1. **Rust:** Stable toolchain (Rust 1.77.2+).
+2. **Node.js:** v18+ (v20 recommended) and `npm`.
+3. **C++ Build Tools:** Required for compiling SQLite/SQLCipher components locally.
+4. **OpenSSL:** Win64 OpenSSL (v3.x or v1.1.1) installed locally (ensure `OPENSSL_DIR` or `rustflags` link configuration is set).
+
+### Getting Started
+1. **Install Dependencies:**
+   ```bash
+   npm install
+   ```
+2. **Launch in Development Mode:**
+   ```bash
+   npm run tauri:dev
+   ```
+3. **Compile Production Installers:**
+   Builds the optimized desktop installer binaries for your current platform:
+   ```bash
+   npm run tauri:build
+   ```
+   - **On Windows:** Produces `.msi` and `.exe` (NSIS) installers in `src-tauri/target/release/bundle/`.
+   - **On Linux:** Produces `.deb`, `.AppImage`, and `.rpm` packages.
+
+---
+
+## 10. Documentation & Marketing Index
 
 To keep this product repository clean, modular, and lightweight, all marketing materials, walkthrough media, and compiled PDFs have been separated to the repository's `gh-pages` branch and are served directly via GitHub Pages:
 
@@ -283,5 +319,6 @@ To keep this product repository clean, modular, and lightweight, all marketing m
 *   **[Triple-Hash Verification Protocol (PDF)](https://chandranshgupta.github.io/Malkhana/triple-hash.pdf)**
 *   **[Hardware & Offline Fallback FAQ (PDF)](https://chandranshgupta.github.io/Malkhana/hardware-faq.pdf)**
 *   **[Compilation & Developer Onboarding Guide (PDF)](https://chandranshgupta.github.io/Malkhana/contributing.pdf)**
+
 
 
