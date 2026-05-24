@@ -43,55 +43,45 @@ Malkhana Vault mandates dual-hashing (generating both **SHA-256** and **MD5** si
 
 This sequence diagram illustrates how the three hashes are verified and tracked across roles:
 
-```mermaid
-sequenceDiagram
-    participant IO as Investigating Officer
-    participant APP as Malkhana Vault
-    participant DB as SQLCipher DB
-    participant MIC as Malkhana In-Charge
-    participant FSL as FSL Examiner
-
-    Note over IO,APP: CRIME SCENE — Device Seized
-    IO->>APP: NEW_INGESTION → Stage 4
-    APP->>APP: dc3dd bit-stream image
-    APP->>APP: SHA-256 + MD5 chunked hash
-    APP-->>IO: H1 value displayed
-    IO->>APP: Confirm + sign (Panch present)
-    APP->>DB: evidence.hash_sha256 = H1<br/>evidence.hash_md5 = H1_md5<br/>seized_at = IST timestamp
-    APP->>DB: custody_chain → SEIZED entry
-
-    Note over MIC,APP: POLICE STATION — Malkhana Receipt
-    MIC->>APP: Scan sealed evidence, enter H1
-    APP->>APP: Re-hash original image → H2
-    APP->>APP: Compare H1 == H2?
-
-    alt H1 == H2 — Integrity confirmed
-        APP-->>MIC: ✅ MALKHANA ACCEPTED
-        APP->>DB: custody_chain → INTAKE<br/>hash_at_transfer = H2<br/>hash_verified = 1
-        APP->>DB: archive_matrix slot assigned
-    else H1 ≠ H2 — Malkhana Gap detected
-        APP-->>MIC: 🚨 HASH MISMATCH — MALKHANA GAP<br/>Evidence may have been accessed in transit
-        APP->>DB: custody_chain → INTAKE<br/>hash_verified = 0<br/>notes = MISMATCH FLAGGED
-        Note over APP,DB: Certificate engine will<br/>include gap warning
-    end
-
-    Note over FSL,APP: FSL LAB — Analysis
-    FSL->>APP: Receive sealed device, verify H2
-    APP->>APP: Re-hash on FSL machine → H3
-    APP->>APP: Compare H2 == H3?
-
-    alt H2 == H3 — No FSL tampering
-        APP-->>FSL: ✅ ANALYSIS AUTHORISED
-        APP->>DB: custody_chain → EXAMINED<br/>hash_at_transfer = H3<br/>hash_verified = 1
-    else H2 ≠ H3 — FSL alteration detected
-        APP-->>FSL: 🚨 HASH MISMATCH — FSL ALTERATION<br/>Forensic examiner may have modified data
-        APP->>DB: custody_chain → EXAMINED<br/>hash_verified = 0<br/>notes = FSL MISMATCH
-    end
-
-    FSL->>APP: Generate Section 63 certificate
-    APP->>DB: Read all custody_chain entries
-    APP->>APP: Build certificate with hash audit trail
-    APP-->>FSL: PDF ready for court submission
+```
++------------------+     NEW INGESTION (Stage 4)      +-------------------+
+| INVESTIGATING    |--------------------------------->| MALKHANA VAULT    |
+| OFFICER (IO)     |                                  | (SQLCipher DB)    |
+|                  |<-- Compute H1 (SHA-256 + MD5) ---|                   |
+|                  |                                  | - Write H1 to DB  |
+|                  |--- Panch Signatures & Confirm -->| - Append Log      |
++------------------+                                  +-------------------+
+                                                                |
+                                                     (Faraday Bag Transit)
+                                                                |
+                                                                v
++------------------+     MALKHANA ENTRY               +-------------------+
+| MALKHANA         |--------------------------------->| MALKHANA VAULT    |
+| IN-CHARGE (MIC)  |                                  | (SQLCipher DB)    |
+|                  |<-- Re-hash Input Item (H2) ------|                   |
+|                  |                                  | - Verify H1 == H2 |
+|                  |    [If Match]                    | - Save Slot Loc   |
+|                  |<-- ✅ Accept & Seal in Drawer ---| - Log Custody     |
+|                  |    [If Mismatch]                 |                   |
+|                  |<-- 🚨 Flag "Malkhana Gap" -------| - Log Gap Warning |
++------------------+                                  +-------------------+
+                                                                |
+                                                     (Analysis Request)
+                                                                |
+                                                                v
++------------------+     FSL EXTRACTION               +-------------------+
+| FORENSIC         |--------------------------------->| MALKHANA VAULT    |
+| EXPERT (FSL)     |                                  | (SQLCipher DB)    |
+|                  |<-- Re-hash Bit-stream (H3) ------|                   |
+|                  |                                  | - Verify H2 == H3 |
+|                  |    [If Match]                    | - Log Verified    |
+|                  |<-- ✅ Authorize Extraction ------|                   |
+|                  |    [If Mismatch]                 |                   |
+|                  |<-- 🚨 Flag "FSL Alteration" -----| - Log Alteration  |
+|                  |                                  |                   |
+|                  |--- Request Section 63 Cert ----->| - Generate PDF    |
+|                  |<-- Court-admissible PDF ---------|                   |
++------------------+                                  +-------------------+
 ```
 
 ---

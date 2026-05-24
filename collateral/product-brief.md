@@ -23,18 +23,7 @@ Malkhana Vault digitizes the tracking of physical and digital forensic evidence.
 
 ---
 
-## 3. Product Licensing & Tiers
-
-| Tier | Name | Deployment | Target | Pricing | Key Features |
-|------|------|------------|--------|---------|--------------|
-| **T0** | **Open Core** | USB Portable | Single Officers / Small Stations | **Free** | Local DB, 3 concurrent cases, AppImage format, full BSA compliance. |
-| **T1** | **Station** | Local PC Install | Individual Police Station | **₹15,000/yr** | 5 officer profiles, unlimited cases, .deb/.rpm installers, email support. |
-| **T2** | **District** | Sync Cluster | SP Office / District HQ | **₹75,000/yr** | 25 seats, Supabase metadata sync (no raw files), SP metrics dashboard. |
-| **T3** | **Enterprise** | On-Premises Server | State Cyber Cells / NIA / CBI | **₹3–8L/yr** | Unlimited seats, custom API integrations, dedicated support engineer. |
-
----
-
-## 4. Minimum Hardware Requirements
+## 3. Minimum Hardware Requirements
 
 - **Processor:** Intel i3 or AMD Ryzen 3 (Ryzen 5/i5 recommended for fast hashing)
 - **Memory:** 4GB RAM (8GB recommended for multi-threaded triage)

@@ -182,6 +182,8 @@ def parse_markdown_to_story(md_path, styles, fits_single_page=False):
                 col_widths = [35, 60, 85, 95, 65, 183] # sum = 523
             elif len(table_headers) == 4:
                 col_widths = [110, 60, 130, 223] # sum = 523
+            elif len(table_headers) == 3:
+                col_widths = [110, 140, 273] # sum = 523
             else:
                 col_widths = None
 
@@ -349,15 +351,16 @@ if __name__ == '__main__':
     # Compiling all requested guides and whitepapers to PDFs
     targets = [
         # Collaterals
-        ('docs/collateral/product-brief.md', 'docs/collateral/product-brief.pdf', True),
-        ('docs/collateral/cryptographic-whitepaper.md', 'docs/collateral/cryptographic-whitepaper.pdf', False),
+        ('collateral/product-brief.md', 'collateral/product-brief.pdf', True),
+        ('collateral/cryptographic-whitepaper.md', 'collateral/cryptographic-whitepaper.pdf', False),
         
         # Primary Guides
-        ('docs/session-custody.md', 'docs/session-custody.pdf', False),
-        ('docs/triple-hash.md', 'docs/triple-hash.pdf', False),
-        ('docs/evaluation.md', 'docs/evaluation.pdf', False),
-        ('docs/hardware-faq.md', 'docs/hardware-faq.pdf', False),
-        ('docs/contributing.md', 'docs/contributing.pdf', False),
+        ('compliance-report.md', 'compliance-report.pdf', False),
+        ('session-custody.md', 'session-custody.pdf', False),
+        ('triple-hash.md', 'triple-hash.pdf', False),
+        ('evaluation.md', 'evaluation.pdf', False),
+        ('hardware-faq.md', 'hardware-faq.pdf', False),
+        ('contributing.md', 'contributing.pdf', False),
     ]
     
     for md_file, pdf_file, single_page in targets:

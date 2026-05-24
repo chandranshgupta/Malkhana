@@ -347,7 +347,7 @@ def create_presentation():
         p_desc.font.color.rgb = c_gray
         p_desc.space_before = Pt(6)
 
-    # ==================== SLIDE 6: Summary & Licensing (Dark theme) ====================
+    # ==================== SLIDE 6: Summary & Deployment (Dark theme) ====================
     slide6 = prs.slides.add_slide(blank_layout)
     set_slide_background(slide6, c_dark)
     
@@ -355,7 +355,7 @@ def create_presentation():
     tb = slide6.shapes.add_textbox(Inches(1.0), Inches(1.5), Inches(11.3), Inches(1.0))
     tf = tb.text_frame
     p = tf.paragraphs[0]
-    p.text = "MALKHANA VAULT: GOVERNMENT-READY"
+    p.text = "MALKHANA VAULT: SECURE & DEPLOYABLE"
     p.font.name = "Calibri"
     p.font.size = Pt(36)
     p.font.bold = True
@@ -363,25 +363,25 @@ def create_presentation():
     
     # Subtitle
     p_sub = tf.add_paragraph()
-    p_sub.text = "Open core model designed for grassroot adoption and seamless district scale."
+    p_sub.text = "Standardized packages designed for grassroots police deployment and air-gapped security."
     p_sub.font.name = "Calibri"
     p_sub.font.size = Pt(18)
     p_sub.font.color.rgb = c_blue
     p_sub.space_before = Pt(8)
     
-    # Four Tiers text
+    # Four deployments text
     tb_tiers = slide6.shapes.add_textbox(Inches(1.0), Inches(3.2), Inches(11.3), Inches(3.0))
     tf_t = tb_tiers.text_frame
     tf_t.word_wrap = True
     
-    tiers = [
-        ("Tier 0: Open Core (Free)", "Individual IOs and small rural stations. Air-gapped single-user AppImage."),
-        ("Tier 1: Station License (₹15,000/yr)", "Individual police stations. 5 seats, local installers, email support."),
-        ("Tier 2: District License (₹75,000/yr)", "SP Office and District HQ. 25 seats, metadata sync, dashboard."),
-        ("Tier 3: State/Central License (Custom)", "State Cyber Cells, CBI, NIA. On-prem servers, customized SLA.")
+    deployments = [
+        ("AppImage (Tauri Portable)", "Runs instantly on Linux workstations without installation or administrator privileges."),
+        ("Debian / RPM Installers", "Native packages for official state Linux distributions (Ubuntu, BOSS Linux)."),
+        ("Windows MSIs (NSIS)", "Standard installers with automatic dependency resolution for Windows terminals."),
+        ("100% Offline Integrity", "Statically compiled SQLite/SQLCipher database. Zero external web calls or data leaks.")
     ]
     
-    for i, (title, desc) in enumerate(tiers):
+    for i, (title, desc) in enumerate(deployments):
         if i == 0:
             p_ti = tf_t.paragraphs[0]
         else:
@@ -402,9 +402,9 @@ def create_presentation():
         r_d.font.color.rgb = c_white
         
     # Save presentation
-    os.makedirs("docs/collateral", exist_ok=True)
-    prs.save("docs/collateral/pitch-deck.pptx")
-    print("Presentation saved successfully at docs/collateral/pitch-deck.pptx")
+    os.makedirs("collateral", exist_ok=True)
+    prs.save("collateral/pitch-deck.pptx")
+    print("Presentation saved successfully at collateral/pitch-deck.pptx")
 
 if __name__ == "__main__":
     create_presentation()
