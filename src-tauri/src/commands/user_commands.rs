@@ -28,56 +28,9 @@ pub fn unlock_vault(
         hex::encode(crate::security::key_derivation::derive_key_from_password(&password))
     );
     
-    // 1. Attempt to open DB with the derived user key
-    let conn = if let Ok(c) = crate::data::database::try_open_or_restore(&db_path, &derived_user_key) {
-        c
-    } else {
-        // 2. Fallback: Try raw user password (legacy format)
-        if let Ok(old_conn) = crate::data::database::open_db_with_key(&db_path, &password) {
-            match old_conn.pragma_update(None, "rekey", &derived_user_key) {
-                Ok(_) => {
-                    log::info!("Successfully migrated SQLCipher database from raw master password to derived key");
-                    drop(old_conn);
-                    crate::data::database::try_open_or_restore(&db_path, &derived_user_key)
-                        .map_err(|err| AppError::Vault(format!("Failed to open DB after migrating raw password: {}", err)))?
-                }
-                Err(err) => return Err(AppError::Vault(format!("Failed to rekey database from raw password: {}", err))),
-            }
-        }
-        // 3. Fallback: Try derived dev key
-        else {
-            let dev_pwd = "malkhana-vault-2024-secure-key-v1";
-            let derived_dev_key = format!(
-                "x'{}'",
-                hex::encode(crate::security::key_derivation::derive_key_from_password(dev_pwd))
-            );
-            if let Ok(old_conn) = crate::data::database::open_db_with_key(&db_path, &derived_dev_key) {
-                match old_conn.pragma_update(None, "rekey", &derived_user_key) {
-                    Ok(_) => {
-                        log::info!("Successfully migrated SQLCipher database from derived dev key to derived user key");
-                        drop(old_conn);
-                        crate::data::database::try_open_or_restore(&db_path, &derived_user_key)
-                            .map_err(|err| AppError::Vault(format!("Failed to open DB after migrating derived dev key: {}", err)))?
-                    }
-                    Err(err) => return Err(AppError::Vault(format!("Failed to rekey database from derived dev key: {}", err))),
-                }
-            }
-            // 4. Fallback: Try legacy raw dev key
-            else if let Ok(old_conn) = crate::data::database::open_db_with_key(&db_path, dev_pwd) {
-                match old_conn.pragma_update(None, "rekey", &derived_user_key) {
-                    Ok(_) => {
-                        log::info!("Successfully migrated SQLCipher database from legacy raw dev key to derived user key");
-                        drop(old_conn);
-                        crate::data::database::try_open_or_restore(&db_path, &derived_user_key)
-                            .map_err(|err| AppError::Vault(format!("Failed to open DB after migrating raw dev key: {}", err)))?
-                    }
-                    Err(err) => return Err(AppError::Vault(format!("Failed to rekey database from legacy raw dev key: {}", err))),
-                }
-            } else {
-                return Err(AppError::Vault("DECRYPTION_FAILED: Invalid decryption key.".to_string()));
-            }
-        }
-    };
+    // Attempt to open DB with the derived user key
+    let conn = crate::data::database::try_open_or_restore(&db_path, &derived_user_key)
+        .map_err(|err| AppError::Vault(format!("DECRYPTION_FAILED: Invalid decryption key or corrupted database: {}", err)))?;
         
     let mut guard = state.0.lock().map_err(|e| AppError::Lock(format!("Database lock failed: {}", e)))?;
     *guard = Some(conn);
@@ -298,18 +251,20 @@ pub fn reset_database(
         }
     }
 
-    // 5. Re-create and decrypt/initialize a new database using the default master key
-    let default_key = "malkhana-vault-2024-secure-key-v1";
-    let derived_dev_key = format!(
-        "x'{}'",
-        hex::encode(crate::security::key_derivation::derive_key_from_password(default_key))
-    );
-    let conn = crate::data::database::try_open_or_restore(&db_path, &derived_dev_key)
-        .map_err(|e| AppError::Vault(format!("Failed to initialize original database: {}", e)))?;
-        
-    // 6. Close the connection handle so it is closed in memory (locked)
-    drop(conn);
+    // 5. Clear any PIN vault key file
+    let pin_vault_path = if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            exe_dir.join("pin_vault.key")
+        } else {
+            std::path::PathBuf::from("pin_vault.key")
+        }
+    } else {
+        std::path::PathBuf::from("pin_vault.key")
+    };
+    if pin_vault_path.exists() {
+        let _ = std::fs::remove_file(pin_vault_path);
+    }
 
-    log::info!("Database successfully reset to original test environment.");
+    log::info!("Database successfully reset. Vault remains locked and uninitialized.");
     Ok(())
 }

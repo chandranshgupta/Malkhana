@@ -811,7 +811,7 @@ mod tests {
 
     #[test]
     fn test_preferred_language_sync() {
-        let conn = open_db_with_key(":memory:", "malkhana-vault-2024-secure-key-v1").unwrap();
+        let conn = open_db_with_key(":memory:", "malkhana-vault-test-in-memory-key-v1").unwrap();
 
         // 1. Verify default seed language is 'en'
         let preferred_lang: Option<String> = conn.query_row(

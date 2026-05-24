@@ -34,9 +34,9 @@ export async function loadRegionalFont(locale) {
     return `"${fontMeta.name}", ${fontMeta.fallback}`;
   }
 
-  // Try online CDN first
+  // Load from local offline path directly
   try {
-    const fontFace = new FontFace(fontMeta.name, `url(${fontMeta.url})`, {
+    const fontFace = new FontFace(fontMeta.name, `url(${fontMeta.fallbackUrl})`, {
       style: 'normal',
       weight: '400 700'
     });
@@ -44,26 +44,10 @@ export async function loadRegionalFont(locale) {
     const loadedFace = await fontFace.load();
     document.fonts.add(loadedFace);
     loadedFonts.add(fontMeta.name);
-    console.log(`Successfully loaded font ${fontMeta.name} from CDN`);
+    console.log(`Successfully loaded font ${fontMeta.name} from local offline path`);
     return `"${fontMeta.name}", ${fontMeta.fallback}`;
   } catch (error) {
-    console.warn(`Failed to load font ${fontMeta.name} from CDN: ${error.message}. Trying local offline fallback...`);
-    
-    // Try local offline fallback
-    try {
-      const fontFace = new FontFace(fontMeta.name, `url(${fontMeta.fallbackUrl})`, {
-        style: 'normal',
-        weight: '400 700'
-      });
-
-      const loadedFace = await fontFace.load();
-      document.fonts.add(loadedFace);
-      loadedFonts.add(fontMeta.name);
-      console.log(`Successfully loaded font ${fontMeta.name} from local offline fallback`);
-      return `"${fontMeta.name}", ${fontMeta.fallback}`;
-    } catch (fallbackError) {
-      console.error(`Failed to load font ${fontMeta.name} from both CDN and offline fallback:`, fallbackError);
-      return fontMeta.fallback;
-    }
+    console.error(`Failed to load local offline font ${fontMeta.name}:`, error);
+    return fontMeta.fallback;
   }
 }
